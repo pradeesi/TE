@@ -77,7 +77,8 @@ TE/GCP/
 ├── GEMINI.md                             # Google Agents CLI development & evaluation workflow guide
 ├── README.md                             # Comprehensive architecture, deployment, and registration guide
 ├── agents-cli-manifest.yaml              # Google Agents CLI project manifest (target: agent_runtime)
-├── deploy_gcp.sh                         # One-command Agent Runtime deployment, Agent Registry & observability script
+├── install.sh                            # Interactive Cloud Shell installer (numbered GCP project menu, Agent Runtime, Registry & Monitoring)
+├── uninstall.sh                          # Interactive Cloud Shell uninstaller (numbered GCP project menu & targeted teardown)
 ├── pyproject.toml                        # Python package dependencies (google-adk[gcp,mcp], a2a-sdk, telemetry)
 ├── uv.lock                               # Locked deterministic dependency graph
 ├── app/                                  # ADK Agent application package
@@ -267,37 +268,44 @@ Choose whichever authentication mechanism your Apigee engineer configures on the
   APIGEE_AUTH_MODE=google_id_token
   ```
 
-#### Step 3: Run the Automated Deployment, Observability & Agent Registry Script
+#### Step 3: Run the Interactive Google Cloud Shell Installer (`./install.sh`)
+
+From **Google Cloud Shell** (or any Linux terminal with `gcloud` authenticated):
 
 ```bash
 cd TE/GCP
-chmod +x deploy_gcp.sh
-./deploy_gcp.sh
+chmod +x install.sh uninstall.sh
+./install.sh
 ```
 
-What [`deploy_gcp.sh`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/deploy_gcp.sh) performs automatically:
-1. Enables `aiplatform.googleapis.com`, `agentregistry.googleapis.com`, `logging.googleapis.com`, `monitoring.googleapis.com`, `cloudtrace.googleapis.com`, `telemetry.googleapis.com`, `storage.googleapis.com`, `bigquery.googleapis.com`, and `secretmanager.googleapis.com`.
-2. Creates the GCS prompt/response telemetry bucket (`gs://<PROJECT_ID>-telecom-agent-logs`) and binds required IAM roles (`roles/logging.logWriter`, `roles/cloudtrace.agent`, `roles/monitoring.metricWriter`, `roles/storage.objectAdmin`) to the Vertex AI Reasoning Engine Service Agent.
-3. Creates Cloud Logging log-based metrics (`telecom_agent_mcp_tool_calls_total`, `telecom_agent_mcp_tool_errors_total`, `telecom_agent_model_armor_blocks_total`) tracking Agent Runtime calls to Apigee over Cloud VPN.
-4. Deploys the ADK Agent to **GCP Agent Runtime** (`agents-cli deploy`) with `--agent-identity`, `--network-attachment` (if set), and all telemetry & Apigee variables.
-5. Verifies the agent registration in **GCP Agent Registry** and outputs the **Reasoning Engine Resource Name** (`deployment_metadata.json`).
+What [`install.sh`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/install.sh) performs automatically:
+1. **Interactive Numbered GCP Project Selector**: Queries all active GCP projects accessible to your account (`[ 1] project-id  Project Name`) and lets you select the target project by entering its number (or pass `--project <PROJECT_ID>`).
+2. **Interactive Region & Apigee Proxy Prompt**: Lets you confirm/override the GCP deployment region (`1-5` or custom) and On-Premises Apigee Proxy URL (`MCP_SERVER_URL`), saving your choices to `.env`.
+3. **Cloud Shell Prerequisite Setup & Pre-Flight Unit Tests**: Automatically installs/updates `uv` and `google-agents-cli`, syncs `.venv`, and runs the unit test suite (`tests/unit/test_agent.py`) before touching cloud resources.
+4. **GCP API Enablement (with Retries)**: Enables `aiplatform.googleapis.com`, `agentregistry.googleapis.com`, `logging.googleapis.com`, `monitoring.googleapis.com`, `cloudtrace.googleapis.com`, `telemetry.googleapis.com`, `storage.googleapis.com`, `bigquery.googleapis.com`, and `secretmanager.googleapis.com`.
+5. **Telemetry Storage, Log Sinks, Metrics & Cloud Monitoring Dashboard**:
+   - Creates the GCS prompt/response completion bucket (`gs://<PROJECT_ID>-telecom-agent-logs`) and BigQuery dataset (`telecom_agent_hybrid_apigee_telemetry`).
+   - Configures the Cloud Logging BigQuery sink (`telecom-agent-hybrid-apigee-reasoning-engine-logs`) and grants IAM writer permissions.
+   - Creates the 3 Cloud Logging log-based metrics (`telecom_agent_mcp_tool_calls_total`, `telecom_agent_mcp_tool_errors_total`, `telecom_agent_model_armor_blocks_total`).
+   - Creates or updates the **Cloud Monitoring Dashboard** (`Telecom ADK Agent Runtime & Apigee VPN Observability`).
+6. **Fault-Tolerant Agent Runtime Deployment & Agent Registry Verification**: Deploys the ADK Agent (`agents-cli deploy`) with automatic polling recovery if the CLI hits a client wait timeout, verifies registration in **GCP Agent Registry**, and writes `deployment_metadata.json`.
 
-*(Optional Terraform Alternative)*: To provision the full BigQuery telemetry dataset, external GCS completion tables, log sinks, and the **Cloud Monitoring Dashboard** via Terraform:
+#### Uninstalling the Agent (`./uninstall.sh`)
+
+To cleanly remove the deployed Agent Runtime Reasoning Engine, Agent Registry entry, Cloud Monitoring Dashboard, log-based metrics, log sink, and telemetry storage from Google Cloud Shell:
 
 ```bash
-cd TE/GCP/deployment/terraform/single-project
-terraform init
-terraform apply \
-  -var="project_id=${PROJECT_ID}" \
-  -var="region=${REGION}" \
-  -var="mcp_server_url=https://apigee.onprem.internal/telecom-mcp"
+cd TE/GCP
+./uninstall.sh
 ```
+
+[`uninstall.sh`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/uninstall.sh) presents the same **numbered list of GCP projects**, asks for confirmation (or accepts `--project <PROJECT_ID> --yes`), and supports `--keep-data` if you want to retain historical logs in GCS/BigQuery while deleting the runtime.
 
 ---
 
 ### Step 4: Manual Registration with the Gemini Enterprise App UI
 
-Once [`deploy_gcp.sh`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/deploy_gcp.sh) completes, it prints your **Reasoning Engine Resource ID** (also saved in `deployment_metadata.json`):
+Once [`install.sh`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/install.sh) completes, it prints your **Reasoning Engine Resource ID** (also saved in `deployment_metadata.json`):
 
 ```text
 projects/<PROJECT_NUMBER_OR_ID>/locations/<REGION>/reasoningEngines/<REASONING_ENGINE_ID>
