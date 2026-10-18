@@ -55,7 +55,7 @@ This repository contains the on-premises **Customer Data Center** components for
 ## Project Directory Structure
 
 ```text
-TE/
+TE/On-prem/
 ├── .dockerignore                         # Excludes .env, virtualenvs, and tests from Docker builds
 ├── .env.example                          # Template environment configuration for the Ubuntu VM
 ├── .gitignore                            # Git exclusion rules for secrets and runtime artifacts
@@ -159,7 +159,7 @@ If `.env` does not exist, `./install.sh` automatically creates it from `.env.exa
 
 ```bash
 git clone https://github.com/pradeesi/TE.git
-cd TE
+cd TE/On-prem
 cp .env.example .env
 nano .env
 ```
