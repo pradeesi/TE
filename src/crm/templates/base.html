@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--
+  Purpose: Base layout template for Telecom Customer Care CRM Console.
+  Architecture/Context: Master template providing responsive navbar, local Bootstrap 5 theme, and UI containers.
+  Dependencies/Side Effects: Loads all CSS and JS assets from local /static directory with zero external CDN dependencies.
+-->
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Telecom CRM - Agent Console{% endblock %}</title>
+  
+  <!-- Locally Stored Bootstrap 5 & Icons (Zero External CDN Dependency) -->
+  <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+  <link rel="stylesheet" href="/static/css/bootstrap-icons.min.css">
+
+  <style>
+    :root {
+      --telecom-primary: #0d6efd;
+      --telecom-dark: #1e293b;
+      --telecom-bg: #f8fafc;
+    }
+    body {
+      background-color: var(--telecom-bg);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    .navbar-telecom {
+      background-color: var(--telecom-dark);
+      border-bottom: 2px solid #334155;
+    }
+    .badge-status {
+      font-size: 0.8rem;
+      padding: 0.35rem 0.65rem;
+    }
+    .card-elevated {
+      border: 1px solid #e2e8f0;
+      border-radius: 0.6rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .telemetry-pill {
+      font-family: monospace;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body class="d-flex flex-column min-vh-100">
+  <!-- Top Navigation Bar -->
+  <nav class="navbar navbar-expand-lg navbar-dark navbar-telecom sticky-top">
+    <div class="container-fluid px-4">
+      <a class="navbar-brand d-flex align-items-center gap-2 fw-bold" href="/">
+        <i class="bi bi-broadcast-pin text-primary fs-4"></i>
+        <span>TelecomCare Enterprise</span>
+      </a>
+
+      <!-- Agent Status & Controls -->
+      <div class="d-flex align-items-center gap-3 ms-auto">
+        <div class="input-group input-group-sm me-2" style="width: 280px;">
+          <form action="/search" method="GET" class="d-flex w-100">
+            <input type="text" name="q" class="form-control" placeholder="Search phone, name, account..." value="{{ search_query or '' }}">
+            <button class="btn btn-primary" type="submit"><i class="bi bi-search"></i></button>
+          </form>
+        </div>
+
+        <span class="badge bg-success-subtle text-success border border-success-subtle d-flex align-items-center gap-1">
+          <i class="bi bi-circle-fill" style="font-size: 0.5rem;"></i> Agent Online (Ext: 4082)
+        </span>
+        
+        <span class="badge bg-light text-secondary border d-flex align-items-center gap-1">
+          <i class="bi bi-headset"></i> Frontline Station #4
+        </span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content Container -->
+  <main class="flex-grow-1 py-4">
+    <div class="container-fluid px-4">
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-white border-top py-2 mt-auto text-muted small">
+    <div class="container-fluid px-4 d-flex justify-content-between">
+      <span>TelecomCare Enterprise CRM &bull; Frontline Customer Operations</span>
+      <span>Enterprise &amp; Residential Care Division &bull; Shift Active</span>
+    </div>
+  </footer>
+
+  <!-- Locally Stored Bootstrap JS Bundle -->
+  <script src="/static/js/bootstrap.bundle.min.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

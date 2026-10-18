@@ -1,0 +1,66 @@
+# ==============================================================================
+# Purpose: Grafana Loki 3.x single-binary configuration using LOCAL FILESYSTEM storage (default).
+# Architecture/Context:
+#   - Selected by deploy/loki/entrypoint.sh when LOKI_STORAGE=filesystem (or unset) and mounted
+#     directly by docker-compose for local development.
+#   - Loki is the RESTRICTED PII store of HybridMCP-Apigee: the MCP server ships full raw tool
+#     responses here, while Apigee ships the Model Armor-masked view ({app="apigee-mcp-proxy"}).
+#   - Filesystem storage is ephemeral on Cloud Run (instance-local /tmp); use loki-config-gcs.yml
+#     (LOKI_STORAGE=gcs) for durable storage.
+# Dependencies/Side Effects:
+#   - Must be started with -config.expand-env=true so ${VAR:-default} references are resolved.
+#   - Writes under /tmp/loki (the only writable path for uid 10001 on Cloud Run and in Docker).
+# Env: PORT (optional, default 3100), LOKI_RETENTION_PERIOD (optional, default 744h = 31 days).
+# ==============================================================================
+
+auth_enabled: false
+
+server:
+  http_listen_port: ${PORT:-3100}
+  grpc_listen_port: 9096
+  log_level: info
+
+common:
+  path_prefix: /tmp/loki
+  storage:
+    filesystem:
+      chunks_directory: /tmp/loki/chunks
+      rules_directory: /tmp/loki/rules
+  replication_factor: 1
+  ring:
+    instance_addr: 127.0.0.1
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+compactor:
+  working_directory: /tmp/loki/compactor
+  compaction_interval: 10m
+  # Retention is enforced by the compactor; Loki 3.x requires an explicit delete-request store.
+  retention_enabled: true
+  retention_delete_delay: 2h
+  delete_request_store: filesystem
+
+ruler:
+  alertmanager_url: http://localhost:9093
+
+limits_config:
+  retention_period: ${LOKI_RETENTION_PERIOD:-744h}
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h
+  ingestion_rate_mb: 16
+  ingestion_burst_size_mb: 32
+  allow_structured_metadata: true
+
+# Loki holds raw PII; never phone home with usage statistics.
+analytics:
+  reporting_enabled: false

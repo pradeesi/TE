@@ -1,0 +1,17 @@
+# Purpose: Dashboard provider configuration for Grafana.
+# Architecture/Context: Automatically loads the HybridMCP-Apigee JSON dashboards (MCP tool telemetry, raw MCP
+#                       audit trail and the Apigee Model Armor security row) upon startup.
+# Dependencies/Side Effects: Scans /var/lib/grafana/dashboards for JSON files.
+
+apiVersion: 1
+
+providers:
+  - name: "HybridMCP-Apigee Dashboards"
+    orgId: 1
+    folder: "HybridMCP-Apigee"
+    type: file
+    disableDeletion: false
+    editable: true
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

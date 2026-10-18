@@ -1,0 +1,40 @@
+# ==============================================================================
+# Purpose: Excludes secrets, local state, and non-runtime directories from the
+#          Docker build context on the Ubuntu VM.
+# Architecture/Context: Used by `docker compose build` on the Ubuntu VM.
+# Dependencies/Side Effects: Keeps image builds fast and prevents `.env` from
+#          being copied into container layers.
+# ==============================================================================
+
+# Secrets and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*credentials*.json
+*service-account*.json
+
+# Python / tooling artifacts
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.db
+*.sqlite3
+
+# Non-container files
+install.sh
+uninstall.sh
+scripts/
+tests/
+README.md
+
+# VCS, OS and IDE noise
+.git/
+.gitignore
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

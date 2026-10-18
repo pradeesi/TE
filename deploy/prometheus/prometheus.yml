@@ -1,0 +1,19 @@
+# Purpose: Prometheus scrape configuration for LOCAL docker-compose development.
+# Architecture/Context: Used by deploy/prometheus/entrypoint.sh when MCP_METRICS_URL is not set.
+#                       Scrapes the MCP server container over the compose bridge network.
+# Dependencies/Side Effects: Scrapes targets at 10s intervals for real-time dashboards.
+
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+
+scrape_configs:
+  - job_name: "telecom-mcp-server"
+    metrics_path: "/metrics"
+    scheme: http
+    static_configs:
+      - targets: ["mcp-server:8001"]
+        labels:
+          app: "hybrid-mcp-apigee"
+          component: "mcp-server"
+          environment: "local"

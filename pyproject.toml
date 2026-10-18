@@ -1,0 +1,46 @@
+# ==============================================================================
+# Purpose: Python packaging metadata for the On-Premises Telecom MCP Server
+#          and Customer Care CRM Application.
+# Architecture/Context: Mirrors requirements.txt for editable installs and pytest
+#          execution on the Ubuntu host.
+# Dependencies/Side Effects: None at runtime; pytest is an optional 'test' extra.
+# ==============================================================================
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "telecom-onprem-mcp"
+version = "1.0.0"
+description = "On-premises Telecom Customer Care FastMCP Server, CRM Application, PostgreSQL, and Observability stack"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "Pradeep Singh" }
+]
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.28.0",
+    "pydantic>=2.6.0",
+    "pydantic-settings>=2.2.0",
+    "sqlalchemy[asyncio]>=2.0.28",
+    "asyncpg>=0.29.0",
+    "psycopg2-binary>=2.9.9",
+    "jinja2>=3.1.3",
+    "python-multipart>=0.0.9",
+    "httpx>=0.27.0",
+    "prometheus-client>=0.20.0",
+    "faker>=24.0.0",
+    "aiosqlite>=0.20.0",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8.0.0"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

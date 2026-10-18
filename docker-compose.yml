@@ -1,0 +1,189 @@
+# ==============================================================================
+# Purpose: Production Docker Compose stack for the On-Premises Customer Data
+#          Center components deployed on a dedicated Ubuntu VM.
+# Architecture/Context:
+#   - Deploys the 6 core Customer Data Center components plus Portainer CE on
+#     the shared `telecom-net` Docker bridge network:
+#       1. postgres   (DB Server - PostgreSQL 16)         : Port 5432
+#       2. crm-app    (CRM Application - FastAPI/Jinja2)  : Port 8000
+#       3. mcp-server (MCP Server - JSON-RPC 2.0 / SSE)   : Port 8001
+#       4. loki       (Grafana Loki 3.0 - Audit Store)    : Port 3100
+#       5. prometheus (Prometheus - Metrics Scraper)      : Port 9090
+#       6. grafana    (Grafana - Dashboards UI)           : Port 3000
+#       7. portainer  (Portainer CE - Container Status UI): Ports 9443 (HTTPS) / 9000 (HTTP)
+#   - Apigee Hybrid is installed and managed separately on dedicated VMs and
+#     connects across the customer network to `http://<UBUNTU_VM_IP>:8001/mcp`
+#     (and optionally pushes masked audit logs to `http://<UBUNTU_VM_IP>:3100/loki/api/v1/push`).
+# Dependencies/Side Effects:
+#   - Every service uses `restart: always` so all containers automatically start
+#     on Ubuntu VM boot / restart events once `docker.service` is enabled.
+#   - Reads configuration from `.env` (`cp .env.example .env`).
+#   - Persists database, metrics, logs, dashboards, and Portainer state in
+#     named Docker volumes across VM reboots.
+# ==============================================================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: telecom-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-telecom_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (see .env.example)}
+      POSTGRES_DB: ${POSTGRES_DB:-telecom_db}
+    ports:
+      - "${BIND_ADDRESS:-0.0.0.0}:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-telecom_user} -d ${POSTGRES_DB:-telecom_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - telecom-net
+
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: telecom-onprem/telecom-app:local
+    container_name: telecom-mcp-server
+    restart: always
+    command: ["python3", "-m", "src.mcp.server"]
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      SERVICE_NAME: telecom-mcp-server
+      MCP_PORT: "8001"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-telecom_user}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (see .env.example)}@postgres:5432/${POSTGRES_DB:-telecom_db}
+      DB_ALLOW_SQLITE_FALLBACK: "false"
+      DEFAULT_END_USER_EMAIL: ${DEFAULT_END_USER_EMAIL:-unknown-user@telecom.onprem}
+      LOKI_URL: http://loki:3100
+      LOKI_AUTH_MODE: none
+    ports:
+      - "${BIND_ADDRESS:-0.0.0.0}:${MCP_PORT:-8001}:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      loki:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8001/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - telecom-net
+
+  crm-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: telecom-onprem/telecom-app:local
+    container_name: telecom-crm-console
+    restart: always
+    command: ["python3", "-m", "src.crm.app"]
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      SERVICE_NAME: telecom-crm-console
+      CRM_PORT: "8000"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-telecom_user}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (see .env.example)}@postgres:5432/${POSTGRES_DB:-telecom_db}
+      DB_ALLOW_SQLITE_FALLBACK: "false"
+      DEFAULT_END_USER_EMAIL: ${DEFAULT_END_USER_EMAIL:-unknown-user@telecom.onprem}
+      LOKI_URL: http://loki:3100
+      LOKI_AUTH_MODE: none
+    ports:
+      - "${BIND_ADDRESS:-0.0.0.0}:${CRM_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mcp-server:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - telecom-net
+
+  loki:
+    build:
+      context: .
+      dockerfile: deploy/loki/Dockerfile
+    image: telecom-onprem/telecom-loki:local
+    container_name: telecom-loki
+    restart: always
+    environment:
+      LOKI_RETENTION_PERIOD: ${LOKI_RETENTION_PERIOD:-744h}
+    ports:
+      - "${BIND_ADDRESS:-0.0.0.0}:${LOKI_PORT:-3100}:3100"
+    volumes:
+      - loki_data:/tmp/loki
+    networks:
+      - telecom-net
+
+  prometheus:
+    build:
+      context: .
+      dockerfile: deploy/prometheus/Dockerfile
+    image: telecom-onprem/telecom-prometheus:local
+    container_name: telecom-prometheus
+    restart: always
+    ports:
+      - "${BIND_ADDRESS:-0.0.0.0}:${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - prometheus_data:/tmp/prometheus
+    depends_on:
+      - mcp-server
+    networks:
+      - telecom-net
+
+  grafana:
+    build:
+      context: .
+      dockerfile: deploy/grafana/Dockerfile
+    image: telecom-onprem/telecom-grafana:local
+    container_name: telecom-grafana
+    restart: always
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env (see .env.example)}
+      GRAFANA_DATASOURCE_AUTH: none
+      PROMETHEUS_URL: http://prometheus:9090
+      LOKI_URL: http://loki:3100
+    ports:
+      - "${BIND_ADDRESS:-0.0.0.0}:${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana_data:/tmp/grafana
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - telecom-net
+
+  portainer:
+    image: portainer/portainer-ce:lts
+    container_name: telecom-portainer
+    restart: always
+    ports:
+      - "${BIND_ADDRESS:-0.0.0.0}:${PORTAINER_HTTPS_PORT:-9443}:9443"
+      - "${BIND_ADDRESS:-0.0.0.0}:${PORTAINER_HTTP_PORT:-9000}:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    networks:
+      - telecom-net
+
+networks:
+  telecom-net:
+    driver: bridge
+
+volumes:
+  pg_data:
+  loki_data:
+  prometheus_data:
+  grafana_data:
+  portainer_data:

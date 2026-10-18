@@ -1,0 +1,640 @@
+{% extends "base.html" %}
+
+{% block title %}{{ customer.first_name }} {{ customer.last_name }} - Customer 360{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  <!-- Customer Header Card -->
+  <div class="col-12">
+    <div class="card card-elevated bg-white p-3">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div class="d-flex align-items-center gap-3">
+          <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center fw-bold fs-4" style="width: 54px; height: 54px;">
+            {{ customer.first_name[0] }}{{ customer.last_name[0] }}
+          </div>
+          <div>
+            <h4 class="mb-0 fw-bold d-flex align-items-center gap-2">
+              {{ customer.first_name }} {{ customer.last_name }}
+              <span class="badge {% if customer.loyalty_tier == 'Platinum' %}bg-primary{% elif customer.loyalty_tier == 'Gold' %}bg-warning text-dark{% else %}bg-secondary{% endif %} fs-6">
+                {{ customer.loyalty_tier }} Member
+              </span>
+            </h4>
+            <div class="text-muted small mt-1">
+              <span class="me-3"><i class="bi bi-envelope"></i> {{ customer.email }}</span>
+              <span class="me-3"><i class="bi bi-telephone"></i> <strong class="telemetry-pill">{{ phone_masked }}</strong></span>
+              <span class="me-3"><i class="bi bi-geo-alt"></i> {{ customer.city }}, {{ customer.state }} ({{ customer.postal_code }})</span>
+              <span><i class="bi bi-shield-lock"></i> SSN: {{ ssn_masked }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Call Timer Counter -->
+        <div class="d-flex align-items-center gap-3">
+          <div class="text-end">
+            <span class="badge bg-danger d-inline-flex align-items-center gap-1 px-3 py-2 fs-6">
+              <i class="bi bi-telephone-fill"></i> Live Call: <span id="callTimer">00:00</span>
+            </span>
+            <div class="text-muted small mt-1">Target AHT: &lt; 240 seconds</div>
+          </div>
+          <a href="/" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Queue
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Left Column: Active Subscriptions & Diagnostics -->
+  <div class="col-lg-8">
+    <!-- Active Services Section -->
+    <div class="card card-elevated bg-white mb-4">
+      <div class="card-header bg-white py-3">
+        <h5 class="mb-0 fw-bold d-flex align-items-center gap-2">
+          <i class="bi bi-hdd-network text-primary"></i> Subscriptions & Active Services
+        </h5>
+      </div>
+      <div class="card-body">
+        {% for acc in customer.accounts %}
+          <div class="mb-3 p-3 bg-light rounded border">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="fw-bold">Billing Account: {{ acc.account_number }}</span>
+              <div>
+                <span class="badge bg-success-subtle text-success border border-success me-2">{{ acc.status }}</span>
+                <span class="small text-muted">Card: <code>{{ acc.payment_method_card[-4:] }}</code></span>
+                <span class="fw-bold ms-2">Balance: ${{ "%.2f"|format(acc.balance_amount) }}</span>
+              </div>
+            </div>
+
+            {% for sub in acc.subscriptions %}
+            <div class="card bg-white border mt-2 p-3">
+              <div class="d-flex justify-content-between align-items-start">
+                <div>
+                  <h6 class="mb-1 fw-bold text-dark">
+                    <i class="bi {% if sub.service_type == 'HOME_BROADBAND' %}bi-router{% else %}bi-phone{% endif %} text-primary me-1"></i>
+                    {{ sub.plan_name }}
+                  </h6>
+                  <span class="badge {% if sub.status == 'ACTIVE' %}bg-success{% elif sub.status == 'THROTTLED' %}bg-danger{% else %}bg-warning{% endif %}">
+                    {{ sub.status }}
+                  </span>
+                  <span class="text-muted small ms-2">Speed Tier: {{ sub.speed_tier_mbps }} Mbps</span>
+                </div>
+                <div class="text-end">
+                  <div class="fw-bold text-primary fs-5">${{ "%.2f"|format(sub.monthly_fee) }}<span class="small text-muted">/mo</span></div>
+                </div>
+              </div>
+
+              <!-- Data Usage Indicator -->
+              <div class="mt-3">
+                <div class="d-flex justify-content-between small mb-1">
+                  <span>Data Consumption: <strong>{{ "%.1f"|format(sub.current_usage_gb) }} GB</strong></span>
+                  <span>Cap: <strong>{% if sub.data_cap_gb > 0 %}{{ "%.0f"|format(sub.data_cap_gb) }} GB{% else %}Unlimited{% endif %}</strong></span>
+                </div>
+                {% if sub.data_cap_gb > 0 %}
+                  {% set usage_pct = (sub.current_usage_gb / sub.data_cap_gb * 100)|round %}
+                  {% set display_pct = 100 if usage_pct > 100 else usage_pct %}
+                  <div class="progress" style="height: 8px;">
+                    <div class="progress-bar {% if usage_pct >= 100 %}bg-danger{% elif usage_pct > 80 %}bg-warning{% else %}bg-primary{% endif %}" 
+                         role="progressbar" data-progress="{{ display_pct }}"></div>
+                  </div>
+                  {% if usage_pct >= 100 %}
+                    <small class="text-danger fw-bold mt-1 d-block">
+                      <i class="bi bi-exclamation-octagon-fill"></i> Data cap exceeded. Line throttled to 128kbps!
+                    </small>
+                  {% endif %}
+                {% else %}
+                  <div class="progress" style="height: 8px;">
+                    <div class="progress-bar bg-success" style="width: 100%;"></div>
+                  </div>
+                {% endif %}
+              </div>
+
+              <!-- Hardware Devices & Live Diagnostics -->
+              <div class="mt-3 border-top pt-3">
+                <h6 class="small fw-bold text-uppercase text-secondary mb-2">Connected Hardware & Live Line Diagnostics</h6>
+                {% for dev in sub.devices %}
+                <div class="p-2 rounded bg-light border mb-2">
+                  <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                      <strong>{{ dev.device_type }}</strong> (S/N: <code>{{ dev.serial_number }}</code>)
+                      <span class="badge {% if dev.health_status == 'HEALTHY' %}bg-success{% elif dev.health_status == 'DEGRADED' %}bg-warning text-dark{% else %}bg-danger{% endif %} ms-2">
+                        {{ dev.health_status }}
+                      </span>
+                    </div>
+                    <!-- Remote Action Buttons -->
+                    <div class="btn-group btn-group-sm">
+                      <form action="/devices/{{ dev.id }}/action" method="POST" class="d-inline">
+                        <input type="hidden" name="action" value="reboot">
+                        <input type="hidden" name="customer_id" value="{{ customer.id }}">
+                        <button type="submit" class="btn btn-outline-danger btn-sm d-flex align-items-center gap-1">
+                          <i class="bi bi-arrow-repeat"></i> Remote Reboot
+                        </button>
+                      </form>
+                      <form action="/devices/{{ dev.id }}/action" method="POST" class="d-inline ms-1">
+                        <input type="hidden" name="action" value="channel_optimization">
+                        <input type="hidden" name="customer_id" value="{{ customer.id }}">
+                        <button type="submit" class="btn btn-outline-primary btn-sm d-flex align-items-center gap-1">
+                          <i class="bi bi-broadcast"></i> Optimize Wi-Fi
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+
+                  <!-- Telemetry Metrics Grid -->
+                  <div class="row g-2 mt-2 font-monospace small">
+                    {% if dev.live_telemetry %}
+                      {% for k, v in dev.live_telemetry.items() %}
+                      <div class="col-6 col-md-3">
+                        <div class="bg-white p-1 rounded border text-center">
+                          <div class="text-muted" style="font-size: 0.7rem;">{{ k }}</div>
+                          <div class="fw-bold {% if 'optical_rx' in k and v < -27 %}text-danger{% elif 'packet_loss' in k and v > 5 %}text-danger{% else %}text-dark{% endif %}">
+                            {{ v }}
+                          </div>
+                        </div>
+                      </div>
+                      {% endfor %}
+                    {% endif %}
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Billing & Disputes -->
+    <!-- Billing & Disputes -->
+    <div class="card card-elevated bg-white">
+      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-bold d-flex align-items-center gap-2">
+          <i class="bi bi-credit-card text-primary"></i> Billing History &amp; Invoices (Last 6 Months)
+        </h5>
+        <span class="badge bg-secondary-subtle text-secondary small">Click any invoice to view masked statement</span>
+      </div>
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-sm table-hover align-middle mb-0">
+            <thead class="table-light small">
+              <tr>
+                <th>Cycle</th>
+                <th>Base Charges</th>
+                <th>Roaming</th>
+                <th>Taxes</th>
+                <th>Total</th>
+                <th>Status</th>
+                <th>Dispute Note</th>
+                <th class="text-end">Statement</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for acc in customer.accounts %}
+                {% for b in acc.billing_records %}
+                <tr style="cursor: pointer;" onclick="loadInvoice('{{ b.id }}')" title="Click to view detailed itemized statement">
+                  <td class="fw-bold">{{ b.invoice_month }}</td>
+                  <td>${{ "%.2f"|format(b.base_charges) }}</td>
+                  <td>
+                    {% if b.roaming_charges > 0 %}
+                      <span class="text-danger fw-bold">+${{ "%.2f"|format(b.roaming_charges) }}</span>
+                    {% else %}
+                      $0.00
+                    {% endif %}
+                  </td>
+                  <td>${{ "%.2f"|format(b.taxes) }}</td>
+                  <td class="fw-bold text-dark">${{ "%.2f"|format(b.total_amount) }}</td>
+                  <td>
+                    <span class="badge {% if b.payment_status == 'PAID' %}bg-success{% else %}bg-warning text-dark{% endif %}">
+                      {{ b.payment_status }}
+                    </span>
+                  </td>
+                  <td class="small">
+                    {% if b.dispute_status != 'NONE' %}
+                      <span class="badge bg-danger">{{ b.dispute_status }}</span>
+                      <span class="text-muted d-block">{{ b.dispute_notes }}</span>
+                    {% else %}
+                      <span class="text-muted">None</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-end">
+                    <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 d-inline-flex align-items-center gap-1" onclick="event.stopPropagation(); loadInvoice('{{ b.id }}')">
+                      <i class="bi bi-receipt"></i> Statement
+                    </button>
+                  </td>
+                </tr>
+                {% endfor %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Customer Interaction History & AI Assist Timeline -->
+    <div class="card card-elevated bg-white mt-4">
+      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-bold d-flex align-items-center gap-2">
+          <i class="bi bi-clock-history text-primary"></i> Interaction History &amp; AI Assist Audit Trail
+        </h5>
+        <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+          {{ customer.interactions|length }} Records Logged
+        </span>
+      </div>
+      <div class="card-body">
+        {% if customer.interactions %}
+          <div class="timeline">
+            {% for inter in customer.interactions %}
+            <div class="p-3 mb-3 rounded border {% if 'Gemini' in inter.agent_name or 'AI' in inter.agent_name %}bg-primary-subtle border-primary-subtle{% else %}bg-light border-secondary-subtle{% endif %}">
+              <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                <div class="d-flex align-items-center gap-2">
+                  {% if 'Gemini' in inter.agent_name or 'AI' in inter.agent_name %}
+                    <span class="badge bg-primary text-white d-flex align-items-center gap-1">
+                      <i class="bi bi-robot"></i> Gemini Enterprise AI Assist
+                    </span>
+                  {% else %}
+                    <span class="badge bg-dark text-white d-flex align-items-center gap-1">
+                      <i class="bi bi-headset"></i> Human Agent: {{ inter.agent_name }}
+                    </span>
+                  {% endif %}
+                  {% if inter.upsell_offered %}
+                    <span class="badge {% if inter.upsell_accepted %}bg-success{% else %}bg-secondary{% endif %}">
+                      Upsell {% if inter.upsell_accepted %}Accepted{% else %}Declined{% endif %}
+                    </span>
+                  {% endif %}
+                </div>
+                <div class="text-muted small">
+                  <i class="bi bi-clock"></i> {{ inter.timestamp.strftime('%B %d, %Y at %H:%M UTC') if inter.timestamp else 'Recent Interaction' }}
+                  <span class="ms-2 badge bg-light text-secondary border">{{ inter.call_duration_sec }}s duration</span>
+                </div>
+              </div>
+              <div class="mb-2">
+                <strong class="d-block small text-secondary text-uppercase fw-bold">Customer Inquiry / Issue:</strong>
+                <p class="mb-0 small text-dark fw-medium">{{ inter.issue_summary }}</p>
+              </div>
+              <div class="p-2 bg-white rounded border small">
+                <strong class="text-success d-flex align-items-center gap-1 mb-1">
+                  <i class="bi bi-check-circle-fill"></i> Resolution &amp; Actions Recorded:
+                </strong>
+                <span class="text-secondary">{{ inter.resolution_summary }}</span>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-center py-4 text-muted">
+            <i class="bi bi-chat-square-text fs-3 d-block mb-2"></i>
+            <p class="mb-1 fw-bold">No Prior Interactions Recorded</p>
+            <p class="small mb-0">Use the "Log Interaction" panel on the right to record this caller's notes and resolution.</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Column: Upsell Engine & Call Logging -->
+  <div class="col-lg-4">
+    <!-- Quick Actions & Diagnostic Summary Card -->
+    <div class="card card-elevated bg-white mb-4">
+      <div class="card-header bg-white py-3">
+        <h6 class="mb-0 fw-bold text-dark d-flex align-items-center gap-2">
+          <i class="bi bi-person-check-fill text-primary"></i> Subscriber Quick Info
+        </h6>
+      </div>
+      <div class="card-body small">
+        <div class="d-flex justify-content-between py-1 border-bottom">
+          <span class="text-muted">Verified Phone:</span>
+          <span class="font-monospace fw-bold">{{ phone_masked }}</span>
+        </div>
+        <div class="d-flex justify-content-between py-1 border-bottom">
+          <span class="text-muted">SSN Token:</span>
+          <span class="font-monospace text-secondary">{{ ssn_masked }}</span>
+        </div>
+        <div class="d-flex justify-content-between py-1 border-bottom">
+          <span class="text-muted">Location:</span>
+          <span>{{ customer.city }}, {{ customer.state }} ({{ customer.postal_code }})</span>
+        </div>
+        <div class="d-flex justify-content-between py-1">
+          <span class="text-muted">Loyalty Status:</span>
+          <span class="badge {% if customer.loyalty_tier == 'Platinum' %}bg-primary{% elif customer.loyalty_tier == 'Gold' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+            {{ customer.loyalty_tier }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Targeted Upsell Recommendations -->
+    <div class="card card-elevated bg-white mb-4">
+      <div class="card-header bg-white py-3">
+        <h5 class="mb-0 fw-bold d-flex align-items-center gap-2">
+          <i class="bi bi-gift text-success"></i> Tailored Upsell Offers
+        </h5>
+      </div>
+      <div class="card-body">
+        {% if upsell_offers %}
+          {% for off in upsell_offers %}
+          <div class="p-3 bg-light rounded border border-success-subtle mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <strong class="text-success">{{ off.title }}</strong>
+              <span class="badge bg-success">${{ "%.2f"|format(off.promotional_price) }}/mo</span>
+            </div>
+            <p class="small text-muted mb-2">{{ off.description }}</p>
+            <div class="p-2 bg-white rounded border small mb-2">
+              <strong>Agent Script:</strong>
+              <em class="d-block text-secondary mt-1">"{{ off.pitch_script }}"</em>
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <p class="small text-muted mb-0">No active promotional upsell triggered for current plan.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Call Completion & Note Logging -->
+    <div class="card card-elevated bg-white">
+      <div class="card-header bg-white py-3">
+        <h5 class="mb-0 fw-bold d-flex align-items-center gap-2">
+          <i class="bi bi-journal-check text-primary"></i> Log Customer Interaction Notes
+        </h5>
+      </div>
+      <div class="card-body">
+        <form action="/customers/{{ customer.id }}/log_interaction" method="POST">
+          <input type="hidden" name="call_duration_sec" id="durationInput" value="120">
+
+          <div class="mb-3">
+            <label class="form-label small fw-bold">Agent Name / ID</label>
+            <input type="text" name="agent_name" class="form-control form-control-sm" value="Frontline-Agent-4082" required>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label small fw-bold">Interaction Channel</label>
+            <select name="interaction_channel" class="form-select form-select-sm">
+              <option value="Inbound Phone Call" selected>Inbound Phone Call</option>
+              <option value="AI Agent Escalation">AI Agent Escalation</option>
+              <option value="Live Chat Support">Live Chat Support</option>
+              <option value="In-Store / Field Support">In-Store / Field Support</option>
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label small fw-bold">Customer Issue Summary</label>
+            <textarea name="issue_summary" class="form-control form-control-sm" rows="2" placeholder="e.g., Follow-up call on data throttle discussed with Gemini AI" required></textarea>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label small fw-bold">Resolution &amp; Actions Taken</label>
+            <textarea name="resolution_summary" class="form-control form-control-sm" rows="2" placeholder="e.g., Added speed boost package and verified full 5G connectivity" required></textarea>
+          </div>
+
+          <div class="form-check form-switch mb-2">
+            <input class="form-check-input" type="checkbox" name="upsell_offered" id="upsellOffered">
+            <label class="form-check-label small" for="upsellOffered">Upsell Offer Pitched</label>
+          </div>
+
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" name="upsell_accepted" id="upsellAccepted">
+            <label class="form-check-label small" for="upsellAccepted">Customer Accepted Upgrade</label>
+          </div>
+
+          <button type="submit" class="btn btn-success w-100 d-flex align-items-center justify-content-center gap-2">
+            <i class="bi bi-check-circle-fill"></i> Save Interaction to History
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Itemized Bill Statement Modal (PII Masked) -->
+<div class="modal fade" id="invoiceModal" tabindex="-1" aria-labelledby="invoiceModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content shadow-lg border-0">
+      <div class="modal-header bg-dark text-white py-3">
+        <h5 class="modal-title fw-bold d-flex align-items-center gap-2" id="invoiceModalLabel">
+          <i class="bi bi-receipt-cutoff text-primary"></i> Customer Billing Statement
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-4" id="invoiceModalBody">
+        <div class="d-flex justify-content-between align-items-start border-bottom pb-3 mb-3">
+          <div>
+            <div class="d-flex align-items-center gap-2">
+              <span class="fs-4 fw-bold text-primary">TELECOM 360</span>
+              <span class="badge bg-secondary-subtle text-secondary border">OFFICIAL INVOICE</span>
+            </div>
+            <p class="text-muted small mb-0 mt-1">Telecom Global Carrier Services Inc. &bull; Enterprise &amp; Residential Division</p>
+          </div>
+          <div class="text-end">
+            <h6 class="fw-bold mb-0 text-dark" id="modalInvoiceId">INV-2026-08-00000</h6>
+            <div class="text-muted small" id="modalBillingPeriod">Period: 2026-08-01 to 2026-08-28</div>
+            <div class="mt-1">
+              <span class="badge bg-success" id="modalPaymentStatus">PAID</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-3 mb-4">
+          <!-- Billed To (Masked PII) -->
+          <div class="col-sm-6">
+            <div class="p-3 bg-light rounded border h-100">
+              <h6 class="fw-bold text-uppercase small text-secondary mb-2">
+                <i class="bi bi-person-badge"></i> Billed Subscriber (Masked PII)
+              </h6>
+              <div class="fw-bold text-dark fs-6" id="modalSubscriberName">Subscriber Name</div>
+              <div class="text-muted small mt-1">
+                <div><i class="bi bi-telephone"></i> <span id="modalPhoneNumber">+1 (555) ***-****</span></div>
+                <div><i class="bi bi-geo-alt"></i> <span id="modalStreetAddress">*** ***, City, State</span></div>
+                <div><i class="bi bi-envelope"></i> <span id="modalEmail">***@***.***</span></div>
+              </div>
+            </div>
+          </div>
+          <!-- Account & Payment Method -->
+          <div class="col-sm-6">
+            <div class="p-3 bg-light rounded border h-100">
+              <h6 class="fw-bold text-uppercase small text-secondary mb-2">
+                <i class="bi bi-credit-card"></i> Account &amp; Settlement Info
+              </h6>
+              <div class="small">
+                <div class="d-flex justify-content-between py-1 border-bottom">
+                  <span class="text-muted">Account Number:</span>
+                  <strong class="font-monospace" id="modalAccountNumber">ACC-********</strong>
+                </div>
+                <div class="d-flex justify-content-between py-1 border-bottom">
+                  <span class="text-muted">Subscription Plan:</span>
+                  <strong id="modalPlanName">Standard Telecom Plan</strong>
+                </div>
+                <div class="d-flex justify-content-between py-1 border-bottom">
+                  <span class="text-muted">Settlement Card:</span>
+                  <span class="font-monospace text-dark fw-bold" id="modalPaymentCard">**** **** **** 0000</span>
+                </div>
+                <div class="d-flex justify-content-between py-1">
+                  <span class="text-muted">AutoPay Status:</span>
+                  <span class="badge bg-success-subtle text-success border border-success">ENROLLED</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dispute Warning Alert if applicable -->
+        <div id="modalDisputeAlert" class="alert alert-danger py-2 small d-none mb-3">
+          <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-exclamation-octagon-fill fs-5"></i>
+            <div>
+              <strong>Active Billing Dispute:</strong> <span id="modalDisputeStatusBadge" class="badge bg-danger ms-1">UNDER_REVIEW</span>
+              <div id="modalDisputeNotes" class="mt-1">Customer disputing roaming charges incurred during travel.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Line Item Breakdown Table -->
+        <div class="table-responsive mb-3">
+          <table class="table table-bordered align-middle mb-0">
+            <thead class="table-light small text-uppercase">
+              <tr>
+                <th>Description</th>
+                <th>Billing Cycle</th>
+                <th class="text-end">Amount</th>
+              </tr>
+            </thead>
+            <tbody class="small">
+              <tr>
+                <td>
+                  <div class="fw-bold" id="modalLineItemPlan">Monthly Base Recurring Charges</div>
+                  <div class="text-muted" style="font-size: 0.75rem;">Standard service allotment, unlimited text/voice/fiber connectivity</div>
+                </td>
+                <td id="modalLineItemCycle">2026-08</td>
+                <td class="text-end fw-semibold" id="modalBaseCharges">$0.00</td>
+              </tr>
+              <tr id="modalRoamingRow">
+                <td>
+                  <div class="fw-bold text-danger">International Roaming &amp; Out-of-Zone Usage</div>
+                  <div class="text-muted" style="font-size: 0.75rem;">Roaming cellular data sessions and partner network interconnects</div>
+                </td>
+                <td id="modalRoamingCycle">2026-08</td>
+                <td class="text-end fw-semibold text-danger" id="modalRoamingCharges">$0.00</td>
+              </tr>
+              <tr id="modalExtraRow">
+                <td>
+                  <div class="fw-bold">Value-Added Services &amp; Hardware Lease</div>
+                  <div class="text-muted" style="font-size: 0.75rem;">ONT/Gateway modem equipment rental fee</div>
+                </td>
+                <td id="modalExtraCycle">2026-08</td>
+                <td class="text-end fw-semibold" id="modalExtraCharges">$0.00</td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="fw-bold text-muted">Government Regulatory Taxes &amp; Surcharges</div>
+                  <div class="text-muted" style="font-size: 0.75rem;">State telecom excise, universal service fund, municipal 911 fees</div>
+                </td>
+                <td id="modalTaxesCycle">2026-08</td>
+                <td class="text-end fw-semibold" id="modalTaxes">$0.00</td>
+              </tr>
+              <tr class="table-light fs-6">
+                <td colspan="2" class="text-end fw-bold">Total Statement Amount:</td>
+                <td class="text-end fw-bold text-primary fs-5" id="modalTotalAmount">$0.00</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="p-2 bg-light rounded border text-muted small text-center">
+          <i class="bi bi-shield-check text-success"></i> Customer PII (Phone, Street Address, SSN, Credit Card) has been dynamically masked in compliance with PCI-DSS &amp; Carrier Privacy Regulations.
+        </div>
+      </div>
+      <div class="modal-footer bg-light py-2">
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="window.print()">
+          <i class="bi bi-printer"></i> Print Statement
+        </button>
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Set dynamic progress bar widths
+  document.querySelectorAll('.progress-bar[data-progress]').forEach(el => {
+    el.style.width = el.dataset.progress + '%';
+  });
+
+  // Simple live timer for call handling
+  let seconds = 0;
+  const timerElement = document.getElementById('callTimer');
+  const durationInput = document.getElementById('durationInput');
+
+  setInterval(() => {
+    seconds++;
+    const mins = String(Math.floor(seconds / 60)).padStart(2, '0');
+    const secs = String(seconds % 60).padStart(2, '0');
+    timerElement.textContent = `${mins}:${secs}`;
+    durationInput.value = seconds;
+  }, 1000);
+
+  // Fetch and display itemized invoice modal with masked PII
+  async function loadInvoice(billingId) {
+    try {
+      const res = await fetch(`/api/invoices/${billingId}`);
+      if (!res.ok) {
+        alert('Could not fetch invoice details.');
+        return;
+      }
+      const data = await res.json();
+
+      document.getElementById('modalInvoiceId').textContent = data.invoice_id;
+      document.getElementById('modalBillingPeriod').textContent = `Period: ${data.billing_period}`;
+
+      const statusBadge = document.getElementById('modalPaymentStatus');
+      statusBadge.textContent = data.payment_status;
+      if (data.payment_status === 'PAID') {
+        statusBadge.className = 'badge bg-success';
+      } else {
+        statusBadge.className = 'badge bg-warning text-dark';
+      }
+
+      document.getElementById('modalSubscriberName').textContent = data.customer.subscriber_name;
+      document.getElementById('modalPhoneNumber').textContent = data.customer.phone_number;
+      document.getElementById('modalStreetAddress').textContent = data.customer.street_address;
+      document.getElementById('modalEmail').textContent = data.customer.email;
+
+      document.getElementById('modalAccountNumber').textContent = data.account.account_number;
+      document.getElementById('modalPlanName').textContent = data.account.plan_name;
+      document.getElementById('modalPaymentCard').textContent = data.account.payment_card;
+
+      document.getElementById('modalLineItemPlan').textContent = `${data.account.plan_name} - Monthly Service`;
+      document.getElementById('modalLineItemCycle').textContent = data.invoice_month;
+      document.getElementById('modalBaseCharges').textContent = `$${data.charges.base_charges.toFixed(2)}`;
+
+      document.getElementById('modalRoamingCycle').textContent = data.invoice_month;
+      document.getElementById('modalRoamingCharges').textContent = `$${data.charges.roaming_charges.toFixed(2)}`;
+
+      document.getElementById('modalExtraCycle').textContent = data.invoice_month;
+      document.getElementById('modalExtraCharges').textContent = `$${data.charges.extra_charges.toFixed(2)}`;
+
+      document.getElementById('modalTaxesCycle').textContent = data.invoice_month;
+      document.getElementById('modalTaxes').textContent = `$${data.charges.taxes.toFixed(2)}`;
+
+      document.getElementById('modalTotalAmount').textContent = `$${data.charges.total_amount.toFixed(2)}`;
+
+      // Dispute alert handling
+      const disputeAlert = document.getElementById('modalDisputeAlert');
+      if (data.dispute_status && data.dispute_status !== 'NONE') {
+        disputeAlert.classList.remove('d-none');
+        document.getElementById('modalDisputeStatusBadge').textContent = data.dispute_status;
+        document.getElementById('modalDisputeNotes').textContent = data.dispute_notes || 'Customer inquiry submitted for this charge cycle.';
+      } else {
+        disputeAlert.classList.add('d-none');
+      }
+
+      const modalEl = document.getElementById('invoiceModal');
+      const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+      bsModal.show();
+    } catch (err) {
+      console.error('Failed to load invoice:', err);
+      alert('Error loading invoice details.');
+    }
+  }
+</script>
+{% endblock %}

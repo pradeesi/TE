@@ -1,0 +1,68 @@
+# ==============================================================================
+# Purpose: Prevents secrets, database files, Python build artifacts, and OS/IDE
+#          noise from being committed to version control.
+# Architecture/Context: Root gitignore for the On-Premises Telecom MCP + CRM +
+#          Observability repository (`TE`).
+# Dependencies/Side Effects: Force-excludes `.env` while keeping `.env.example`.
+# ==============================================================================
+
+# ---- Secrets & credentials (never commit) ------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+credentials*.json
+*-credentials.json
+service-account*.json
+*-sa-key.json
+*.keyfile
+
+# ---- Python ------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+env/
+.python-version
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# ---- Local runtime data ------------------------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+/data/
+/loki-data/
+/grafana-data/
+/prometheus-data/
+/portainer-data/
+*.log
+
+# ---- OS noise ----------------------------------------------------------------
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*~
+*.swp
+*.swo
+
+# ---- IDE / editor ------------------------------------------------------------
+.vscode/
+.idea/
+*.iml
+.project
+.settings/

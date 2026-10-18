@@ -1,0 +1,29 @@
+# Purpose: Auto-provisioning datasources for Prometheus and Loki in Grafana.
+# Architecture/Context: Ensures Grafana boots with pre-wired metrics and logging backends across Local and Cloud.
+#                       On Cloud Run the URLs point at IAM-protected services; deploy/grafana/entrypoint.sh then
+#                       injects Google ID tokens (GRAFANA_DATASOURCE_AUTH=google_id_token), which is why both
+#                       datasources stay editable. The uids are referenced by every dashboard panel.
+# Dependencies/Side Effects: Connects to internal docker network services or Cloud Run URLs via env vars
+#                            PROMETHEUS_URL and LOKI_URL.
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: PBFA97CFB590B2093
+    access: proxy
+    url: ${PROMETHEUS_URL}
+    isDefault: true
+    editable: true
+
+  - name: Loki
+    type: loki
+    uid: P8E80F9AEF21F6940
+    access: proxy
+    url: ${LOKI_URL}
+    isDefault: false
+    editable: true
+    jsonData:
+      # Masked-response and raw audit lines can be large; allow wide log queries in the panels.
+      maxLines: 1000
