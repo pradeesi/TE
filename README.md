@@ -59,6 +59,7 @@ TE/
 ├── .dockerignore                         # Excludes .env, virtualenvs, and tests from Docker builds
 ├── .env.example                          # Template environment configuration for the Ubuntu VM
 ├── .gitignore                            # Git exclusion rules for secrets and runtime artifacts
+├── APIGEE_CONFIGURATION_GUIDE.md         # Step-by-step Apigee Hybrid / Apigee X proxy configuration guide
 ├── Dockerfile                            # Shared Python 3.11 image for MCP Server and CRM Application
 ├── README.md                             # Ubuntu VM installation, network access, and Postman guide
 ├── docker-compose.yml                    # 7-container stack with restart: always and persistent volumes
@@ -229,7 +230,7 @@ Replace `<UBUNTU_VM_IP>` below with the Ubuntu VM's IP address (for example, `10
 - **REST Direct Execution**: `http://<UBUNTU_VM_IP>:8001/execute`
 - **Prometheus Metrics**: `http://<UBUNTU_VM_IP>:8001/metrics`
 - **Health Check**: `http://<UBUNTU_VM_IP>:8001/health`
-- **Apigee Hybrid Target Configuration**: Configure your customer-managed Apigee Hybrid proxy TargetEndpoint to point to `http://<UBUNTU_VM_IP>:8001/mcp`.
+- **Apigee Hybrid Target Configuration**: Configure your customer-managed Apigee Hybrid proxy TargetEndpoint `<URL>` to `http://<UBUNTU_VM_IP>:8001` (Apigee automatically appends `/mcp` from `proxy.pathsuffix`). See **[`APIGEE_CONFIGURATION_GUIDE.md`](APIGEE_CONFIGURATION_GUIDE.md)** for the complete, copy-pasteable Apigee proxy XML/JS bundle, Model Armor setup, and verification commands.
 
 ### 4. Grafana (Observability & Audit Dashboards)
 - **Web URL**: `http://<UBUNTU_VM_IP>:3000`
