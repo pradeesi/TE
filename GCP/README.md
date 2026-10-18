@@ -150,56 +150,66 @@ All configuration is externalized via environment variables or `.env` (copied fr
 
 ---
 
-## Local Verification & Testing
+## Google Cloud Shell Installation & Uninstallation Guide
+
+All installation, verification, and uninstallation steps are designed to be executed directly from **Google Cloud Shell** (`https://shell.cloud.google.com`). You do not need to manually install Python, `uv`, or `google-agents-cli` beforehand — [`./install.sh`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/install.sh) installs all prerequisites and runs pre-flight unit tests automatically inside Cloud Shell.
+
+### Step 1: Open Google Cloud Shell & Clone the Repository
+
+Open [Google Cloud Shell](https://shell.cloud.google.com) in your browser and run:
 
 ```bash
+git clone https://github.com/pradeesi/TE.git
 cd TE/GCP
-
-# Sync Python virtual environment & run unit tests
-uv sync --all-extras
-uv run pytest tests/unit/test_agent.py -v
+chmod +x install.sh uninstall.sh
 ```
 
 ---
 
-## Agent Runtime Deployment Playbook (Google Cloud Shell)
+### Step 2: Run the Interactive Installer (`./install.sh`) in Google Cloud Shell
 
-### Step 1: Configure Cloud VPN / Private Service Connect (If Apigee Uses a Private RFC 1918 IP)
-
-Because Vertex AI Agent Runtime runs in a Google-managed tenant project, reaching a **private on-premises IP address over Cloud VPN** requires a **Private Service Connect (PSC) Network Attachment** in the VPC connected to your Cloud VPN tunnel:
+Launch the installer directly from Google Cloud Shell:
 
 ```bash
-export PROJECT_ID="your-gcp-project-id"
-export REGION="us-central1"
-export VPC_NAME="your-vpn-connected-vpc"
-export PSC_SUBNET_NAME="telecom-agent-psc-subnet"
-export ATTACHMENT_NAME="telecom-agent-vpn-attachment"
-
-# 1. Create a dedicated subnet in your VPN-connected VPC (if not already present)
-gcloud compute networks subnets create "${PSC_SUBNET_NAME}" \
-  --project="${PROJECT_ID}" \
-  --network="${VPC_NAME}" \
-  --region="${REGION}" \
-  --range="10.240.0.0/24"
-
-# 2. Create the PSC Network Attachment with automatic producer acceptance
-gcloud compute network-attachments create "${ATTACHMENT_NAME}" \
-  --project="${PROJECT_ID}" \
-  --region="${REGION}" \
-  --subnets="${PSC_SUBNET_NAME}" \
-  --connection-preference=ACCEPT_AUTOMATIC
-
-# 3. Copy the full Network Attachment resource URI into .env:
-# NETWORK_ATTACHMENT=projects/${PROJECT_ID}/regions/${REGION}/networkAttachments/${ATTACHMENT_NAME}
+./install.sh
 ```
 
-*(Note: Ensure your Cloud Router / Cloud VPN tunnel advertises the `${PSC_SUBNET_NAME}` CIDR range `10.240.0.0/24` to the on-premises network so return traffic from the on-premises Apigee proxy routes back to Agent Runtime).*
+#### Interactive Prompts in Google Cloud Shell
+
+1. **Numbered GCP Project Selection**:
+   [`./install.sh`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/install.sh) queries all active GCP projects accessible to your Cloud Shell account and displays a numbered menu:
+   ```text
+   ==============================================================================
+     Select Target Google Cloud Project
+   ==============================================================================
+     [ 1] my-dev-project                   My Dev Project
+     [ 2] pradeesi-ai-demo                 Pradeesi AI Demo [current gcloud project]
+     [ 3] telecom-hybrid-prod              Telecom Hybrid Prod
+   ------------------------------------------------------------------------------
+   Enter project number (1-3) or Project ID [default: 2 -> pradeesi-ai-demo]:
+   ```
+   Enter the **number** corresponding to your target GCP project (or press **Enter** to accept the default).
+
+2. **GCP Region Selection**:
+   Select the target Agent Runtime region by number (`1` for `us-central1`, `2` for `us-east1`, `3` for `us-west1`, `4` for `europe-west1`, `5` for `asia-southeast1`, or `6` to type a custom region).
+
+3. **On-Premises Apigee Proxy URL (`MCP_SERVER_URL`)**:
+   Enter the southbound Apigee Proxy URL reachable over Cloud VPN (for example, `https://apigee.onprem.internal/telecom-mcp`). Your selections are automatically saved to `.env`.
+
+#### What `./install.sh` Automates in Cloud Shell
+- Installs/verifies `uv` and `google-agents-cli` in the Cloud Shell environment, syncs `.venv`, and runs the unit test suite (`tests/unit/test_agent.py`).
+- Enables required GCP APIs (`aiplatform.googleapis.com`, `agentregistry.googleapis.com`, `logging.googleapis.com`, `monitoring.googleapis.com`, `cloudtrace.googleapis.com`, `telemetry.googleapis.com`, `storage.googleapis.com`, `bigquery.googleapis.com`, `secretmanager.googleapis.com`) with automatic retry backoff.
+- Creates the GCS prompt/response completion bucket (`gs://<PROJECT_ID>-telecom-agent-logs`), BigQuery dataset (`telecom_agent_hybrid_apigee_telemetry`), Cloud Logging BigQuery sink (`telecom-agent-hybrid-apigee-reasoning-engine-logs`), and IAM bindings.
+- Creates the 3 Cloud Logging log-based metrics (`telecom_agent_mcp_tool_calls_total`, `telecom_agent_mcp_tool_errors_total`, `telecom_agent_model_armor_blocks_total`) and the **Cloud Monitoring Dashboard** (`Telecom ADK Agent Runtime & Apigee VPN Observability`).
+- Deploys the ADK Agent to **Vertex AI Agent Runtime** (`agents-cli deploy`) with automatic polling recovery if the CLI hits a client wait timeout, verifies registration in **GCP Agent Registry**, and writes `deployment_metadata.json`.
 
 ---
 
-### Step 2: Configure Flexible Apigee Authentication in `.env`
+### Step 3: (Optional) Advanced Apigee Auth & Private Cloud VPN PSC Configuration in Cloud Shell
 
-Choose whichever authentication mechanism your Apigee engineer configures on the on-premises Apigee proxy:
+If you need to customize Apigee authentication or attach a Private Service Connect (PSC) interface for private RFC 1918 routing over Cloud VPN, you can either pass CLI flags to `./install.sh` or edit `.env` in Cloud Shell (`nano .env`) before re-running `./install.sh`:
+
+#### Flexible Apigee Authentication Examples (`.env` or CLI flags)
 
 - **Case 1 — No Authentication yet / Cloud VPN Network Trust (`APIGEE_AUTH_MODE=none` or `auto`)**:
   ```dotenv
@@ -226,36 +236,38 @@ Choose whichever authentication mechanism your Apigee engineer configures on the
   APIGEE_AUTH_MODE=google_id_token
   ```
 
----
+#### Private RFC 1918 Routing over Cloud VPN (PSC Network Attachment)
 
-### Step 3: Run the Interactive Google Cloud Shell Installer (`./install.sh`)
-
-From **Google Cloud Shell** (or any Linux terminal with `gcloud` authenticated):
+If the On-Premises Apigee proxy uses a private RFC 1918 IP address over Cloud VPN, run these commands in **Google Cloud Shell** to create a PSC Network Attachment in your VPN-connected VPC and pass it to `./install.sh`:
 
 ```bash
-git clone https://github.com/pradeesi/TE.git
-cd TE/GCP
-chmod +x install.sh uninstall.sh
-./install.sh
-```
+export PROJECT_ID="your-gcp-project-id"
+export REGION="us-central1"
+export VPC_NAME="your-vpn-connected-vpc"
+export PSC_SUBNET_NAME="telecom-agent-psc-subnet"
+export ATTACHMENT_NAME="telecom-agent-vpn-attachment"
 
-What [`install.sh`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/install.sh) performs automatically:
-1. **Interactive Numbered GCP Project Selector**: Queries all active GCP projects accessible to your account (`[ 1] project-id  Project Name`) and lets you select the target project by entering its number (or pass `--project <PROJECT_ID>`).
-2. **Interactive Region & Apigee Proxy Prompt**: Lets you confirm/override the GCP deployment region (`1-5` or custom) and On-Premises Apigee Proxy URL (`MCP_SERVER_URL`), saving your choices to `.env`.
-3. **Cloud Shell Prerequisite Setup & Pre-Flight Unit Tests**: Automatically installs/updates `uv` and `google-agents-cli`, syncs `.venv`, and runs the unit test suite (`tests/unit/test_agent.py`) before touching cloud resources.
-4. **GCP API Enablement (with Retries)**: Enables `aiplatform.googleapis.com`, `agentregistry.googleapis.com`, `logging.googleapis.com`, `monitoring.googleapis.com`, `cloudtrace.googleapis.com`, `telemetry.googleapis.com`, `storage.googleapis.com`, `bigquery.googleapis.com`, and `secretmanager.googleapis.com`.
-5. **Telemetry Storage, Log Sinks, Metrics & Cloud Monitoring Dashboard**:
-   - Creates the GCS prompt/response completion bucket (`gs://<PROJECT_ID>-telecom-agent-logs`) and BigQuery dataset (`telecom_agent_hybrid_apigee_telemetry`).
-   - Configures the Cloud Logging BigQuery sink (`telecom-agent-hybrid-apigee-reasoning-engine-logs`) and grants IAM writer permissions.
-   - Creates the 3 Cloud Logging log-based metrics (`telecom_agent_mcp_tool_calls_total`, `telecom_agent_mcp_tool_errors_total`, `telecom_agent_model_armor_blocks_total`).
-   - Creates or updates the **Cloud Monitoring Dashboard** (`Telecom ADK Agent Runtime & Apigee VPN Observability`).
-6. **Fault-Tolerant Agent Runtime Deployment & Agent Registry Verification**: Deploys the ADK Agent (`agents-cli deploy`) with automatic polling recovery if the CLI hits a client wait timeout, verifies registration in **GCP Agent Registry**, and writes `deployment_metadata.json`.
+gcloud compute networks subnets create "${PSC_SUBNET_NAME}" \
+  --project="${PROJECT_ID}" \
+  --network="${VPC_NAME}" \
+  --region="${REGION}" \
+  --range="10.240.0.0/24"
+
+gcloud compute network-attachments create "${ATTACHMENT_NAME}" \
+  --project="${PROJECT_ID}" \
+  --region="${REGION}" \
+  --subnets="${PSC_SUBNET_NAME}" \
+  --connection-preference=ACCEPT_AUTOMATIC
+
+# Deploy with the PSC Network Attachment in Cloud Shell:
+./install.sh --network-attachment "projects/${PROJECT_ID}/regions/${REGION}/networkAttachments/${ATTACHMENT_NAME}"
+```
 
 ---
 
 ### Step 4: Manual Registration with the Gemini Enterprise App UI
 
-Once [`install.sh`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/install.sh) completes, it prints your **Reasoning Engine Resource ID** (also saved in `deployment_metadata.json`):
+Once [`./install.sh`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/install.sh) completes in Google Cloud Shell, it prints your **Reasoning Engine Resource ID** (also saved in `deployment_metadata.json`):
 
 ```text
 projects/<PROJECT_NUMBER_OR_ID>/locations/<REGION>/reasoningEngines/<REASONING_ENGINE_ID>
@@ -269,38 +281,38 @@ To manually register the deployed Agent Runtime agent into your **Gemini Enterpr
 4. Choose **Vertex AI Agent Engine / ADK Agent (Reasoning Engine)**:
    - **Display Name**: `Telecom Customer Care Co-Pilot`
    - **Description**: `Enterprise telecom agent for subscriber lookup, line diagnostics, remote hardware remediation, billing breakdown, network outages, and upsell recommendations.`
-   - **Reasoning Engine Resource Name**: Paste the `remote_agent_runtime_id` from `deployment_metadata.json` (`projects/<PROJECT>/locations/<REGION>/reasoningEngines/<ENGINE_ID>`).
+   - **Reasoning Engine Resource Name**: Paste the `remote_agent_runtime_id` printed by `./install.sh` (`projects/<PROJECT>/locations/<REGION>/reasoningEngines/<ENGINE_ID>`).
 5. *(Optional)* Under **System Instructions / Agent Playbook**, paste the turn-by-turn contact center guidance from [`skills/telecom_customer_care_agent/SKILL.md`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/skills/telecom_customer_care_agent/SKILL.md).
 6. Click **Save / Publish**. Gemini Enterprise will now invoke your Agent Runtime agent natively over `:streamQuery` and propagate the signed-in human operator's Google Identity email (`X-Goog-Authenticated-User-Email`) through Cloud VPN and Apigee to the on-premises MCP Server and Loki audit logs.
 
 ---
 
-### Step 5: Inspecting Agent Registry & Agent Runtime Observability on GCP
+### Step 5: Inspecting Agent Registry & Agent Runtime Observability from Cloud Shell
 
 1. **GCP Agent Registry**:
-   - View in Cloud Console: `https://console.cloud.google.com/vertex-ai/agents/agent-registry?project=${PROJECT_ID}`
-2. **Cloud Logging (Reasoning Engine & MCP Tool Call Structured Logs)**:
+   - View in Cloud Console: `https://console.cloud.google.com/vertex-ai/agents/agent-registry`
+2. **Cloud Logging (Reasoning Engine & MCP Tool Call Structured Logs in Cloud Shell)**:
    ```bash
    gcloud logging read \
      'resource.type="aiplatform.googleapis.com/ReasoningEngine"' \
-     --project="${PROJECT_ID}" \
      --limit=25 \
      --format="table(timestamp, severity, jsonPayload.event, jsonPayload.tool_name, jsonPayload.duration_ms, jsonPayload.auth_mode)"
    ```
 3. **Cloud Trace (End-to-End Distributed Spans)**:
-   - Open **Cloud Console &rarr; Trace &rarr; Trace Explorer** (`https://console.cloud.google.com/traces/list?project=${PROJECT_ID}`) to inspect `invoke_agent`, `call_llm`, and `execute_tool` spans.
+   - Open **Cloud Console &rarr; Trace &rarr; Trace Explorer** to inspect `invoke_agent`, `call_llm`, and `execute_tool` spans.
 4. **Cloud Monitoring (Metrics & Dashboard)**:
    - Open **Cloud Console &rarr; Monitoring &rarr; Dashboards** and select **`Telecom ADK Agent Runtime & Apigee VPN Observability`**.
 
 ---
 
-### Step 6: Uninstalling the Agent (`./uninstall.sh`)
+### Step 6: Uninstalling the Agent from Google Cloud Shell (`./uninstall.sh`)
 
-To cleanly remove the deployed Agent Runtime Reasoning Engine, Agent Registry entry, Cloud Monitoring Dashboard, log-based metrics, log sink, and telemetry storage from Google Cloud Shell:
+To cleanly remove the deployed Agent Runtime Reasoning Engine, Agent Registry entry, Cloud Monitoring Dashboard, log-based metrics, log sink, and telemetry storage from **Google Cloud Shell**:
 
 ```bash
-cd TE/GCP
+cd ~/TE/GCP
 ./uninstall.sh
 ```
 
-[`uninstall.sh`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/uninstall.sh) presents the same **numbered list of GCP projects**, asks for confirmation (or accepts `--project <PROJECT_ID> --yes`), and supports `--keep-data` if you want to retain historical logs in GCS/BigQuery while deleting the runtime.
+[`./uninstall.sh`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/uninstall.sh) displays the same **numbered list of accessible GCP projects**, asks for confirmation (or accepts `--project <PROJECT_ID> --yes`), and supports `--keep-data` if you want to retain historical logs in GCS/BigQuery while deleting the Agent Runtime instance.
+
