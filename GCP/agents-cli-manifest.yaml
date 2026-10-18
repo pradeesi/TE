@@ -1,13 +1,15 @@
+# Purpose: Google Agents CLI manifest for the Telecom Customer Care ADK Agent.
+# Architecture/Context: Configures `agents-cli deploy` to target Vertex AI Agent Runtime (`agent_runtime`).
+# Dependencies/Side Effects: Consumed by `agents-cli` during `./install.sh`.
+
 name: "telecom-agent-hybrid-apigee"
 acli_version: "1.0.0"
 agent_directory: "app"
-region: "europe-west1"
+region: "us-central1"
 base_template: "adk"
-generated_at: "2026-09-27T10:51:07.928058+00:00"
 language: "python"
 create_params:
   deployment_target: "agent_runtime"
   session_type: "none"
   cicd_runner: "skip"
   is_a2a: true
-  agent_guidance_filename: "GEMINI.md"

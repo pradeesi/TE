@@ -1,14 +1,14 @@
 <!--
-  Purpose: Architecture, configuration, deployment, observability, Agent Registry, and Gemini Enterprise registration guide for the GCP Telecom ADK Agent.
-  Architecture/Context: Governs the GCP-resident Google ADK Agent (running on Vertex AI Agent Runtime) connecting over Cloud VPN to the On-Premises Apigee API Proxy and MCP Server (`TE/On-prem`).
+  Purpose: Architecture, configuration, Cloud Shell installation/uninstallation, observability, Agent Registry, and Gemini Enterprise registration guide for the GCP Telecom ADK Agent on Vertex AI Agent Runtime.
+  Architecture/Context: Governs the GCP-resident Google ADK Agent (running exclusively on Vertex AI Agent Runtime) connecting over Cloud VPN to the On-Premises Apigee API Proxy and MCP Server (`TE/On-prem`).
   Dependencies/Side Effects: Requires Google Cloud SDK (`gcloud`), `uv`, and `google-agents-cli`.
 -->
 
 # Telecom Customer Care ADK Agent — GCP Agent Runtime (`TE/GCP`)
 
-This directory ([`TE/GCP/`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP)) contains the **Google Agent Development Kit (ADK) Agent** deployed on **Google Cloud Agent Runtime (Vertex AI Reasoning Engines)**.
+This directory ([`TE/GCP/`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP)) contains the **Google Agent Development Kit (ADK) Agent** deployed exclusively on **Google Cloud Agent Runtime (Vertex AI Reasoning Engines)**.
 
-The agent connects over **Google Cloud VPN** (via a Private Service Connect Network Attachment or routable Apigee ingress) to the **On-Premises Apigee API Proxy**, which governs access to the **On-Premises Telecom MCP Server** ([`TE/On-prem/`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/On-prem)). Once deployed on GCP Agent Runtime, the agent is registered in **GCP Agent Registry**, monitored with **GCP Agent Runtime Logging, Cloud Trace, and Cloud Monitoring**, and can be manually registered into the **Gemini Enterprise App** UI.
+The agent connects over **Google Cloud VPN** (via a Private Service Connect Network Attachment or routable Apigee ingress) to the **On-Premises Apigee API Proxy**, which governs access to the **On-Premises Telecom MCP Server** ([`TE/On-prem/`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/On-prem)). Once deployed on GCP Agent Runtime via [`./install.sh`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/install.sh), the agent is automatically registered in **GCP Agent Registry**, monitored with **GCP Agent Runtime Logging, Cloud Trace, and Cloud Monitoring**, and ready for manual registration into the **Gemini Enterprise App** UI.
 
 ---
 
@@ -18,7 +18,7 @@ The agent connects over **Google Cloud VPN** (via a Private Service Connect Netw
 flowchart LR
     subgraph GCP["Google Cloud Platform (TE/GCP)"]
         GE["Gemini Enterprise App UI<br/>(Manual ADK Registration)"]
-        AR["Vertex AI Agent Runtime<br/>(Reasoning Engine: telecom_agent_hybrid_apigee)"]
+        AR["Vertex AI Agent Runtime<br/>(Reasoning Engine: telecom-agent-hybrid-apigee)"]
         REG["GCP Agent Registry<br/>(Fleet Catalog & Discovery)"]
         OBS["GCP Agent Runtime Observability<br/>Cloud Logging • Cloud Trace • Cloud Monitoring • BigQuery/GCS"]
         PSC["PSC Network Attachment &<br/>Cloud Router / Cloud VPN Tunnel"]
@@ -47,9 +47,9 @@ flowchart LR
    - The ADK Agent (`gemini-2.5-flash`) is strictly bounded to the 8 telecom customer-care MCP tools (`search_customer`, `get_customer_360`, `get_service_diagnostics`, `run_remote_device_action`, `check_network_outages`, `get_billing_breakdown`, `get_upsell_recommendations`, `log_agent_interaction`).
    - Any out-of-scope prompt is deterministically refused with a standardized compliance message.
 2. **Cloud VPN Connectivity to On-Premises Apigee**:
-   - Supports **Private Service Connect Interface (PSC-I)** Network Attachments (`--network-attachment`) so the managed Agent Runtime container can route directly to private RFC 1918 on-premises Apigee IP addresses over **Cloud VPN** or **Cloud Interconnect**, with optional private Cloud DNS peering and configurable SSL verification (`APIGEE_VERIFY_SSL`).
+   - Supports **Private Service Connect Interface (PSC-I)** Network Attachments (`--network-attachment`) so the managed Agent Runtime instance routes directly to private RFC 1918 on-premises Apigee IP addresses over **Cloud VPN** or **Cloud Interconnect**, with configurable SSL verification (`APIGEE_VERIFY_SSL`).
 3. **Flexible Apigee Authentication (`APIGEE_AUTH_MODE`)**:
-   - Because on-premises Apigee authentication policies can vary across environments, [`app/config.py`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/app/config.py) and [`app/tools.py`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/app/tools.py) support plug-and-play authentication modes without code changes:
+   - Because on-premises Apigee authentication policies can vary across environments, [`app/config.py`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/app/config.py) and [`app/tools.py`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/app/tools.py) support plug-and-play authentication modes via `.env` without code changes:
      - `auto` *(default)*: Automatically attaches credentials based on which environment variables are populated (`APIGEE_API_KEY`, `MCP_AUTH_TOKEN`, `APIGEE_BEARER_TOKEN`, `APIGEE_CUSTOM_HEADER_NAME`, or `APIGEE_BASIC_USER`), or sends unauthenticated requests if none are set.
      - `none`: Sends no authentication headers (for Cloud VPN network-level trust or mTLS).
      - `api_key`: Sends `APIGEE_API_KEY` in the header specified by `APIGEE_API_KEY_HEADER` (default: `x-apikey`).
@@ -58,12 +58,12 @@ flowchart LR
      - `basic`: Sends `Authorization: Basic <base64(user:password)>`.
      - `custom_header`: Sends `<APIGEE_CUSTOM_HEADER_NAME>: <APIGEE_CUSTOM_HEADER_VALUE>`.
 4. **GCP Agent Registry Integration**:
-   - Enables `agentregistry.googleapis.com` and deploys to Vertex AI Agent Runtime with SPIFFE Agent Identity (`--agent-identity`), automatically registering the agent in **GCP Agent Registry** for centralized fleet governance.
+   - Enables `agentregistry.googleapis.com` and deploys to Vertex AI Agent Runtime with SPIFFE Agent Identity (`--agent-identity`), registering the agent in **GCP Agent Registry** for centralized fleet governance.
 5. **Full Agent Runtime Logging, Tracing & Monitoring**:
    - **Cloud Trace**: OpenTelemetry spans (`invoke_agent`, `call_llm`, `execute_tool`) exported automatically via `GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY=true`.
    - **Cloud Logging**: Structured JSON logs emitted on every MCP tool invocation (`mcp_tool_call_started`, `mcp_tool_call_completed`, `mcp_tool_call_http_error`, `mcp_tool_blocked_by_model_armor`) correlated with `logging.googleapis.com/trace`.
-   - **Cloud Monitoring**: Custom log-based metrics (`telecom_agent_mcp_tool_calls_total`, `telecom_agent_mcp_tool_errors_total`, `telecom_agent_model_armor_blocks_total`) and a pre-built **Cloud Monitoring Dashboard** defined in [`monitoring.tf`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/deployment/terraform/single-project/monitoring.tf).
-   - **GCS & BigQuery Telemetry**: Full GenAI prompt/response completion logging to GCS (`LOGS_BUCKET_NAME`) and BigQuery log sinks defined in [`telemetry.tf`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/deployment/terraform/single-project/telemetry.tf).
+   - **Cloud Monitoring**: Custom log-based metrics (`telecom_agent_mcp_tool_calls_total`, `telecom_agent_mcp_tool_errors_total`, `telecom_agent_model_armor_blocks_total`) and a pre-built **Cloud Monitoring Dashboard** (`Telecom ADK Agent Runtime & Apigee VPN Observability`) provisioned automatically by [`install.sh`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/install.sh).
+   - **GCS & BigQuery Telemetry**: Full GenAI prompt/response completion logging to GCS (`gs://<PROJECT_ID>-telecom-agent-logs`) and a Cloud Logging BigQuery sink (`telecom_agent_hybrid_apigee_telemetry`) provisioned automatically by [`install.sh`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/install.sh).
 
 ---
 
@@ -72,20 +72,19 @@ flowchart LR
 ```text
 TE/GCP/
 ├── .env.example                          # Template environment configuration (Cloud VPN, Apigee Auth, Telemetry)
-├── .gitignore                            # Excludes .env, virtualenvs, caches, and Terraform state
-├── Dockerfile                            # Container image definition used by Agent Runtime, Cloud Run, and GKE
-├── GEMINI.md                             # Google Agents CLI development & evaluation workflow guide
-├── README.md                             # Comprehensive architecture, deployment, and registration guide
-├── agents-cli-manifest.yaml              # Google Agents CLI project manifest (target: agent_runtime)
-├── install.sh                            # Interactive Cloud Shell installer (numbered GCP project menu, Agent Runtime, Registry & Monitoring)
-├── uninstall.sh                          # Interactive Cloud Shell uninstaller (numbered GCP project menu & targeted teardown)
+├── .gitignore                            # Excludes .env, virtualenvs, caches, and deployment_metadata.json
+├── Dockerfile                            # Container definition required by `agents-cli deploy` for Agent Runtime
+├── README.md                             # Architecture, Cloud Shell installation, and Gemini Enterprise guide
+├── agents-cli-manifest.yaml              # Google Agents CLI manifest (deployment_target: agent_runtime)
+├── install.sh                            # Interactive Cloud Shell installer (numbered GCP project menu)
+├── uninstall.sh                          # Interactive Cloud Shell uninstaller (numbered GCP project menu)
 ├── pyproject.toml                        # Python package dependencies (google-adk[gcp,mcp], a2a-sdk, telemetry)
 ├── uv.lock                               # Locked deterministic dependency graph
 ├── app/                                  # ADK Agent application package
 │   ├── __init__.py                       # Exports root AdkApp
 │   ├── agent.py                          # Root LlmAgent definition, Gemini 2.5 Flash config & strict scope prompt
 │   ├── config.py                         # Pydantic settings for Apigee URL, flexible auth modes & telemetry
-│   ├── fast_api_app.py                   # Unified FastAPI server (ADK web, A2A routes, Reasoning Engine adapter)
+│   ├── fast_api_app.py                   # Agent Runtime container entrypoint (:query, :streamQuery, A2A routes)
 │   ├── tools.py                          # 8 telecom MCP tools with flexible Apigee auth & structured GCP logging
 │   └── app_utils/                        # Agent Runtime adapters and OpenTelemetry instrumentation
 │       ├── a2a.py                        # Agent-to-Agent (A2A) protocol & /.well-known/agent-card.json routes
@@ -93,27 +92,10 @@ TE/GCP/
 │       ├── services.py                   # Shared VertexAiSessionService and GcsArtifactService wiring
 │       ├── telemetry.py                  # Agent Runtime Cloud Trace, Cloud Logging & GCS completion setup
 │       └── typing.py                     # Feedback payload schema for Cloud Logging -> BigQuery sink
-├── deployment/
-│   └── terraform/
-│       ├── shared/                       # BigQuery telemetry SQL views and log export schemas
-│       └── single-project/               # Terraform IaC for Agent Runtime, Agent Registry & GCP Observability
-│           ├── apis.tf                   # Enables aiplatform, agentregistry, logging, monitoring, cloudtrace APIs
-│           ├── iam.tf                    # Service account & IAM bindings for Agent Runtime and Telemetry
-│           ├── monitoring.tf             # Log-based metrics, ReasoningEngine BQ sink & Cloud Monitoring Dashboard
-│           ├── outputs.tf                # Service account and GCS bucket outputs
-│           ├── providers.tf              # Google Cloud Terraform provider configuration
-│           ├── service.tf                # google_vertex_ai_reasoning_engine resource definition
-│           ├── service_outputs.tf        # Outputs Agent Runtime Reasoning Engine resource name
-│           ├── storage.tf                # GCS bucket for GenAI prompt/response completion logs
-│           ├── telemetry.tf              # BigQuery dataset, external tables, and GenAI/feedback log sinks
-│           ├── telemetry_outputs.tf      # BigQuery telemetry dataset outputs
-│           └── variables.tf              # Configurable Terraform variables
 ├── skills/
 │   └── telecom_customer_care_agent/
 │       └── SKILL.md                      # Optional turn-by-turn Contact Center playbook for Gemini Enterprise
 └── tests/
-    ├── eval/                             # LLM-as-judge evaluation suite & datasets
-    ├── integration/                      # FastAPI & Reasoning Engine streaming integration tests
     └── unit/
         └── test_agent.py                 # Unit tests for 8 MCP tools, scope guard & flexible Apigee auth modes
 ```
@@ -133,7 +115,7 @@ TE/GCP/
 
 ## Environment Variables
 
-All configuration is externalized via environment variables or `.env` (copied from [`.env.example`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/.env.example)).
+All configuration is externalized via environment variables or `.env` (copied from [`.env.example`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/.env.example) and updated interactively by [`./install.sh`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/install.sh)).
 
 | Variable | Type | Default / Example | Purpose |
 | :--- | :--- | :--- | :--- |
@@ -168,47 +150,21 @@ All configuration is externalized via environment variables or `.env` (copied fr
 
 ---
 
-## Local Execution Instructions
-
-### 1. Install Prerequisites & Dependencies
+## Local Verification & Testing
 
 ```bash
 cd TE/GCP
 
-# Install uv and google-agents-cli if not already installed
-curl -LsSf https://astral.sh/uv/install.sh | sh
-uv tool install google-agents-cli
-
-# Sync Python virtual environment
+# Sync Python virtual environment & run unit tests
 uv sync --all-extras
-```
-
-### 2. Configure `.env`
-
-```bash
-cp .env.example .env
-nano .env
-```
-
-### 3. Run Automated Unit Tests
-
-```bash
 uv run pytest tests/unit/test_agent.py -v
-```
-
-### 4. Launch Local Interactive ADK Playground
-
-```bash
-uv run agents-cli playground
 ```
 
 ---
 
-## Cloud Deployment Playbooks
+## Agent Runtime Deployment Playbook (Google Cloud Shell)
 
-### Playbook 1: Deploy to GCP Agent Runtime (Primary Architecture)
-
-#### Step 1: Configure Cloud VPN / Private Service Connect (If Apigee Uses a Private RFC 1918 IP)
+### Step 1: Configure Cloud VPN / Private Service Connect (If Apigee Uses a Private RFC 1918 IP)
 
 Because Vertex AI Agent Runtime runs in a Google-managed tenant project, reaching a **private on-premises IP address over Cloud VPN** requires a **Private Service Connect (PSC) Network Attachment** in the VPC connected to your Cloud VPN tunnel:
 
@@ -239,7 +195,9 @@ gcloud compute network-attachments create "${ATTACHMENT_NAME}" \
 
 *(Note: Ensure your Cloud Router / Cloud VPN tunnel advertises the `${PSC_SUBNET_NAME}` CIDR range `10.240.0.0/24` to the on-premises network so return traffic from the on-premises Apigee proxy routes back to Agent Runtime).*
 
-#### Step 2: Configure Flexible Apigee Authentication in `.env`
+---
+
+### Step 2: Configure Flexible Apigee Authentication in `.env`
 
 Choose whichever authentication mechanism your Apigee engineer configures on the on-premises Apigee proxy:
 
@@ -268,11 +226,14 @@ Choose whichever authentication mechanism your Apigee engineer configures on the
   APIGEE_AUTH_MODE=google_id_token
   ```
 
-#### Step 3: Run the Interactive Google Cloud Shell Installer (`./install.sh`)
+---
+
+### Step 3: Run the Interactive Google Cloud Shell Installer (`./install.sh`)
 
 From **Google Cloud Shell** (or any Linux terminal with `gcloud` authenticated):
 
 ```bash
+git clone https://github.com/pradeesi/TE.git
 cd TE/GCP
 chmod +x install.sh uninstall.sh
 ./install.sh
@@ -289,17 +250,6 @@ What [`install.sh`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/G
    - Creates the 3 Cloud Logging log-based metrics (`telecom_agent_mcp_tool_calls_total`, `telecom_agent_mcp_tool_errors_total`, `telecom_agent_model_armor_blocks_total`).
    - Creates or updates the **Cloud Monitoring Dashboard** (`Telecom ADK Agent Runtime & Apigee VPN Observability`).
 6. **Fault-Tolerant Agent Runtime Deployment & Agent Registry Verification**: Deploys the ADK Agent (`agents-cli deploy`) with automatic polling recovery if the CLI hits a client wait timeout, verifies registration in **GCP Agent Registry**, and writes `deployment_metadata.json`.
-
-#### Uninstalling the Agent (`./uninstall.sh`)
-
-To cleanly remove the deployed Agent Runtime Reasoning Engine, Agent Registry entry, Cloud Monitoring Dashboard, log-based metrics, log sink, and telemetry storage from Google Cloud Shell:
-
-```bash
-cd TE/GCP
-./uninstall.sh
-```
-
-[`uninstall.sh`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/uninstall.sh) presents the same **numbered list of GCP projects**, asks for confirmation (or accepts `--project <PROJECT_ID> --yes`), and supports `--keep-data` if you want to retain historical logs in GCS/BigQuery while deleting the runtime.
 
 ---
 
@@ -328,13 +278,7 @@ To manually register the deployed Agent Runtime agent into your **Gemini Enterpr
 ### Step 5: Inspecting Agent Registry & Agent Runtime Observability on GCP
 
 1. **GCP Agent Registry**:
-   ```bash
-   gcloud alpha agent-registry agents list \
-     --project="${PROJECT_ID}" \
-     --location="${REGION}"
-   ```
-   Or view in Cloud Console: `https://console.cloud.google.com/vertex-ai/agents/agent-registry?project=${PROJECT_ID}`
-
+   - View in Cloud Console: `https://console.cloud.google.com/vertex-ai/agents/agent-registry?project=${PROJECT_ID}`
 2. **Cloud Logging (Reasoning Engine & MCP Tool Call Structured Logs)**:
    ```bash
    gcloud logging read \
@@ -343,95 +287,20 @@ To manually register the deployed Agent Runtime agent into your **Gemini Enterpr
      --limit=25 \
      --format="table(timestamp, severity, jsonPayload.event, jsonPayload.tool_name, jsonPayload.duration_ms, jsonPayload.auth_mode)"
    ```
-
 3. **Cloud Trace (End-to-End Distributed Spans)**:
    - Open **Cloud Console &rarr; Trace &rarr; Trace Explorer** (`https://console.cloud.google.com/traces/list?project=${PROJECT_ID}`) to inspect `invoke_agent`, `call_llm`, and `execute_tool` spans.
-
 4. **Cloud Monitoring (Metrics & Dashboard)**:
-   - Open **Cloud Console &rarr; Monitoring &rarr; Dashboards** and select **`Telecom ADK Agent Runtime & Apigee VPN Observability`** (or query log-based metrics `logging.googleapis.com/user/telecom_agent_mcp_tool_calls_total` and `logging.googleapis.com/user/telecom_agent_mcp_tool_errors_total` in Metrics Explorer).
+   - Open **Cloud Console &rarr; Monitoring &rarr; Dashboards** and select **`Telecom ADK Agent Runtime & Apigee VPN Observability`**.
 
 ---
 
-### Playbook 2: Alternative Deployment to Google Cloud Run
+### Step 6: Uninstalling the Agent (`./uninstall.sh`)
 
-If you need to host the ADK FastAPI container (`app.fast_api_app:app`) on **Google Cloud Run** with Direct VPC Egress over Cloud VPN:
+To cleanly remove the deployed Agent Runtime Reasoning Engine, Agent Registry entry, Cloud Monitoring Dashboard, log-based metrics, log sink, and telemetry storage from Google Cloud Shell:
 
 ```bash
-export PROJECT_ID="your-gcp-project-id"
-export REGION="us-central1"
-
-gcloud run deploy telecom-agent-hybrid-apigee \
-  --source . \
-  --project="${PROJECT_ID}" \
-  --region="${REGION}" \
-  --network="your-vpn-connected-vpc" \
-  --subnet="your-vpc-subnet" \
-  --vpc-egress=private-ranges-only \
-  --set-env-vars="GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${REGION},MCP_SERVER_URL=https://apigee.onprem.internal/telecom-mcp,APIGEE_AUTH_MODE=auto" \
-  --no-allow-unauthenticated
+cd TE/GCP
+./uninstall.sh
 ```
 
----
-
-### Playbook 3: Alternative Deployment to Google Kubernetes Engine (GKE)
-
-To deploy the ADK Agent container on **GKE Autopilot / Standard** inside the VPC connected to Cloud VPN:
-
-```bash
-export PROJECT_ID="your-gcp-project-id"
-export REGION="us-central1"
-export IMAGE_URI="${REGION}-docker.pkg.dev/${PROJECT_ID}/telecom-repo/telecom-agent-hybrid-apigee:v1"
-
-# 1. Build and push the container image
-gcloud builds submit --tag "${IMAGE_URI}" --project="${PROJECT_ID}"
-
-# 2. Apply Kubernetes Deployment & Service
-kubectl apply -f - <<EOF
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: telecom-agent-hybrid-apigee
-  namespace: default
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: telecom-agent-hybrid-apigee
-  template:
-    metadata:
-      labels:
-        app: telecom-agent-hybrid-apigee
-    spec:
-      containers:
-      - name: adk-agent
-        image: ${IMAGE_URI}
-        ports:
-        - containerPort: 8080
-        env:
-        - name: GOOGLE_GENAI_USE_VERTEXAI
-          value: "true"
-        - name: GOOGLE_CLOUD_PROJECT
-          value: "${PROJECT_ID}"
-        - name: GOOGLE_CLOUD_LOCATION
-          value: "${REGION}"
-        - name: MCP_SERVER_URL
-          value: "https://apigee.onprem.internal/telecom-mcp"
-        - name: APIGEE_AUTH_MODE
-          value: "auto"
-        - name: GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY
-          value: "true"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: telecom-agent-hybrid-apigee-svc
-  namespace: default
-spec:
-  type: ClusterIP
-  selector:
-    app: telecom-agent-hybrid-apigee
-  ports:
-  - port: 80
-    targetPort: 8080
-EOF
-```
+[`uninstall.sh`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/uninstall.sh) presents the same **numbered list of GCP projects**, asks for confirmation (or accepts `--project <PROJECT_ID> --yes`), and supports `--keep-data` if you want to retain historical logs in GCS/BigQuery while deleting the runtime.

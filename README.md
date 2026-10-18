@@ -68,13 +68,12 @@ TE/
 │   ├── install.sh                            # Interactive Cloud Shell installer (numbered GCP project menu)
 │   ├── uninstall.sh                          # Interactive Cloud Shell uninstaller (numbered GCP project menu)
 │   ├── .env.example                          # Template environment variables (Apigee URL, Auth Mode, Telemetry)
-│   ├── agents-cli-manifest.yaml              # Google Agents CLI manifest
-│   ├── Dockerfile                            # Container image for Cloud Run / GKE alternatives
+│   ├── agents-cli-manifest.yaml              # Google Agents CLI manifest (deployment_target: agent_runtime)
+│   ├── Dockerfile                            # Container definition packaged by `agents-cli deploy` for Agent Runtime
 │   ├── pyproject.toml                        # Python dependencies (google-adk, a2a-sdk, opentelemetry)
 │   ├── app/                                  # ADK Agent code, flexible Apigee auth & GCP telemetry wiring
-│   ├── deployment/terraform/                 # Terraform IaC for Agent Runtime, Agent Registry & Cloud Monitoring
 │   ├── skills/telecom_customer_care_agent/   # Contact Center playbook for Gemini Enterprise
-│   └── tests/                                # Unit, integration, and LLM-as-judge evaluation suites
+│   └── tests/unit/                           # Unit tests for 8 MCP tools & flexible Apigee auth modes
 └── On-prem/                                  # On-Premises Data Center Plane (Ubuntu VM Docker Stack)
     ├── README.md                             # Full On-Premises installation, verification & operations guide
     ├── APIGEE_CONFIGURATION_GUIDE.md         # Foolproof southbound Apigee -> MCP Server configuration guide

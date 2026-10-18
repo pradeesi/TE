@@ -1,10 +1,6 @@
-# Purpose: Container definition for Telecom Customer Care ADK Agent.
-# Architecture/Context: Runs the FastAPI ADK Runner on Cloud Run.
-#
-# DEMO SOFTWARE DISCLAIMER:
-# This code is provided strictly as a demonstration and reference implementation.
-# It comes with NO WARRANTY, NO GUARANTEE, and NO SUPPORT of any kind, either expressed or implied.
-# Use and deployment in any environment is entirely at your own discretion and risk.
+# Purpose: Container image definition packaged by `agents-cli deploy` for Vertex AI Agent Runtime.
+# Architecture/Context: Built and executed by Vertex AI Agent Engine (`ReasoningEngine`) to serve the ADK Agent.
+# Dependencies/Side Effects: Installs Python dependencies from `pyproject.toml` via `uv` and starts `app.fast_api_app:app`.
 
 FROM python:3.12-slim
 
