@@ -137,7 +137,7 @@ All runtime settings are loaded from `.env` (created from `.env.example`). No se
 | `DEFAULT_END_USER_EMAIL` | `string` | `unknown-user@telecom.onprem` | Fallback caller identity recorded in Loki audit logs when no user header is supplied. |
 | `PROMETHEUS_PORT` | `int` | `9090` | Host port exposed for Prometheus. |
 | `LOKI_PORT` | `int` | `3100` | Host port exposed for Grafana Loki. |
-| `LOKI_RETENTION_PERIOD` | `string` | `744h` | Audit log retention window in Loki (`744h` = 31 days). |
+| `LOKI_RETENTION_PERIOD` | `string` | `72h` | Audit log retention window in Loki (`72h` = 3 days) to bound disk consumption. |
 | `GRAFANA_PORT` | `int` | `3000` | Host port exposed for the Grafana web UI. |
 | `GRAFANA_ADMIN_USER` | `string` | `admin` | Grafana administrator username. |
 | `GRAFANA_ADMIN_PASSWORD` | `string` | `telecom_admin` | **Required.** Grafana administrator password. |

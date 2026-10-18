@@ -316,6 +316,20 @@ install_python_dependencies() {
 enable_docker_on_boot() {
   local sudo_cmd="$1"
   log_info "Enabling containerd and docker systemd services to start on VM boot..."
+  if [[ ! -f /etc/docker/daemon.json ]]; then
+    log_info "Configuring Docker daemon log rotation defaults (/etc/docker/daemon.json: max-size=10m, max-file=3)..."
+    ${sudo_cmd} mkdir -p /etc/docker
+    ${sudo_cmd} tee /etc/docker/daemon.json >/dev/null <<'EOF'
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  }
+}
+EOF
+  fi
+
   if command -v systemctl >/dev/null 2>&1; then
     ${sudo_cmd} systemctl unmask containerd.service docker.service docker.socket >/dev/null 2>&1 || true
     ${sudo_cmd} systemctl enable --now containerd.service
@@ -588,6 +602,9 @@ main() {
 
   log_info "Building and starting all 7 on-premises containers (restart policy: always)..."
   run_with_retry 2 5 ${DOCKER_CMD} compose up -d --build --remove-orphans
+
+  log_info "Pruning dangling Docker build layers to keep disk usage compact..."
+  ${DOCKER_CMD} image prune -f >/dev/null 2>&1 || true
 
   wait_for_http "MCP Server" "mcp-server" "http://127.0.0.1:${MCP_PORT:-8001}/health" 90
   wait_for_http "CRM Application" "crm-app" "http://127.0.0.1:${CRM_PORT:-8000}/health" 90

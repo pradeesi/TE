@@ -22,4 +22,4 @@ USER nobody
 EXPOSE 9090
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["--storage.tsdb.path=/tmp/prometheus", "--storage.tsdb.retention.time=15d"]
+CMD ["--storage.tsdb.path=/tmp/prometheus", "--storage.tsdb.retention.time=3d", "--storage.tsdb.retention.size=1GB"]

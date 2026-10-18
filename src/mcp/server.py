@@ -678,6 +678,8 @@ def run():
     Summary:
         CLI runner for launching the MCP server standalone.
         Dynamically respects the PORT environment variable assigned by Cloud Run or container orchestrators.
+        Suppresses repetitive 10-second /health and /metrics probe lines from uvicorn.access so container
+        stdout logs only record real MCP / tool traffic.
 
     Parameters:
         None.
@@ -689,6 +691,15 @@ def run():
         ValueError: If PORT is not an integer.
     """
     import uvicorn
+
+    class _ProbeAccessLogFilter(logging.Filter):
+        """Filters out repetitive /health and /metrics 200 OK probe lines from uvicorn.access."""
+
+        def filter(self, record: logging.LogRecord) -> bool:
+            msg = record.getMessage()
+            return "GET /health " not in msg and "GET /metrics " not in msg
+
+    logging.getLogger("uvicorn.access").addFilter(_ProbeAccessLogFilter())
     port = int(os.environ.get("PORT", settings.PORT or settings.MCP_PORT))
     # proxy_headers lets uvicorn honour X-Forwarded-* from the Google front end for audit IPs.
     uvicorn.run("src.mcp.server:app", host="0.0.0.0", port=port, reload=False, proxy_headers=True,

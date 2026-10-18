@@ -10,23 +10,33 @@
 #       4. loki       (Grafana Loki 3.0 - Audit Store)    : Port 3100
 #       5. prometheus (Prometheus - Metrics Scraper)      : Port 9090
 #       6. grafana    (Grafana - Dashboards UI)           : Port 3000
-#       7. portainer  (Portainer CE - Container Status UI): Ports 9443 (HTTPS) / 9000 (HTTP)
+#       7. portainer  (Portainer CE - Container Status UI): Ports: 9443 (HTTPS) / 9000 (HTTP)
 #   - Apigee Hybrid is installed and managed separately on dedicated VMs and
 #     connects across the customer network to `http://<UBUNTU_VM_IP>:8001/mcp`
 #     (and optionally pushes masked audit logs to `http://<UBUNTU_VM_IP>:3100/loki/api/v1/push`).
 # Dependencies/Side Effects:
 #   - Every service uses `restart: always` so all containers automatically start
 #     on Ubuntu VM boot / restart events once `docker.service` is enabled.
+#   - Every service enforces strict `json-file` log rotation (`max-size: 10m`,
+#     `max-file: 3` = 30 MB max per container) so container logs can never fill
+#     up the host VM disk.
 #   - Reads configuration from `.env` (`cp .env.example .env`).
 #   - Persists database, metrics, logs, dashboards, and Portainer state in
 #     named Docker volumes across VM reboots.
 # ==============================================================================
+
+x-default-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
 
 services:
   postgres:
     image: postgres:16-alpine
     container_name: telecom-postgres
     restart: always
+    logging: *default-logging
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-telecom_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (see .env.example)}
@@ -50,6 +60,7 @@ services:
     image: telecom-onprem/telecom-app:local
     container_name: telecom-mcp-server
     restart: always
+    logging: *default-logging
     command: ["python3", "-m", "src.mcp.server"]
     environment:
       APP_ENV: ${APP_ENV:-production}
@@ -83,6 +94,7 @@ services:
     image: telecom-onprem/telecom-app:local
     container_name: telecom-crm-console
     restart: always
+    logging: *default-logging
     command: ["python3", "-m", "src.crm.app"]
     environment:
       APP_ENV: ${APP_ENV:-production}
@@ -116,8 +128,9 @@ services:
     image: telecom-onprem/telecom-loki:local
     container_name: telecom-loki
     restart: always
+    logging: *default-logging
     environment:
-      LOKI_RETENTION_PERIOD: ${LOKI_RETENTION_PERIOD:-744h}
+      LOKI_RETENTION_PERIOD: ${LOKI_RETENTION_PERIOD:-72h}
     ports:
       - "${BIND_ADDRESS:-0.0.0.0}:${LOKI_PORT:-3100}:3100"
     volumes:
@@ -132,6 +145,7 @@ services:
     image: telecom-onprem/telecom-prometheus:local
     container_name: telecom-prometheus
     restart: always
+    logging: *default-logging
     ports:
       - "${BIND_ADDRESS:-0.0.0.0}:${PROMETHEUS_PORT:-9090}:9090"
     volumes:
@@ -148,6 +162,7 @@ services:
     image: telecom-onprem/telecom-grafana:local
     container_name: telecom-grafana
     restart: always
+    logging: *default-logging
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env (see .env.example)}
@@ -168,6 +183,7 @@ services:
     image: portainer/portainer-ce:lts
     container_name: telecom-portainer
     restart: always
+    logging: *default-logging
     command:
       - "--no-setup-token"
     environment:

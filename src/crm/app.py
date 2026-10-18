@@ -391,9 +391,18 @@ def run():
     Summary:
         CLI runner for launching the CRM console standalone.
         Dynamically respects the PORT environment variable assigned by Cloud Run or container orchestrators.
+        Suppresses repetitive 10-second /health probe lines from uvicorn.access.
     """
     import os
     import uvicorn
+
+    class _ProbeAccessLogFilter(logging.Filter):
+        """Filters out repetitive /health 200 OK probe lines from uvicorn.access."""
+
+        def filter(self, record: logging.LogRecord) -> bool:
+            return "GET /health " not in record.getMessage()
+
+    logging.getLogger("uvicorn.access").addFilter(_ProbeAccessLogFilter())
     port = int(os.environ.get("PORT", settings.PORT or settings.CRM_PORT))
     uvicorn.run("src.crm.app:app", host="0.0.0.0", port=port, reload=False)
 
