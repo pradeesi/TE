@@ -16,11 +16,10 @@
 #     dataset & ReasoningEngine log sink, Cloud Logging log-based metrics, and
 #     the Cloud Monitoring Dashboard for Agent Runtime.
 #   - Deploys the ADK Agent to GCP Agent Runtime (`agents-cli deploy`) with
-#     automatic server-side timeout polling recovery (`agents-cli deploy --status`),
-#     Cloud VPN PSC Network Attachment support, and Agent Registry verification.
+#     automatic server-side timeout polling recovery (`agents-cli deploy --status`)
+#     and Agent Registry verification.
 # Dependencies/Side Effects:
-#   - Designed to run directly inside Google Cloud Shell or any Linux terminal
-#     authenticated with `gcloud`.
+#   - Designed to run directly inside Google Cloud Shell.
 # ==============================================================================
 
 set -Eeuo pipefail
@@ -34,7 +33,6 @@ PROJECT_ID="${PROJECT_ID:-}"
 REGION="${REGION:-}"
 APIGEE_URL="${APIGEE_URL:-}"
 AUTH_MODE="${AUTH_MODE:-}"
-NETWORK_ATTACHMENT_ARG="${NETWORK_ATTACHMENT_ARG:-}"
 AUTO_APPROVE="false"
 ROLLBACK_ON_FAILURE="false"
 SKIP_TESTS="false"
@@ -141,8 +139,6 @@ Options:
                                       (e.g., https://apigee.onprem.internal/telecom-mcp).
   --auth-mode <MODE>                  Apigee auth mode: auto, none, api_key, bearer,
                                       google_id_token, basic, or custom_header.
-  --network-attachment <RESOURCE_URI> Optional PSC Network Attachment URI for
-                                      private Cloud VPN routing.
   --skip-tests                        Skip local pytest unit test execution.
   --rollback-on-failure               Automatically invoke uninstall.sh if
                                       deployment fails.
@@ -178,11 +174,6 @@ parse_args() {
       --auth-mode)
         [[ -z "${2:-}" ]] && { log_error "--auth-mode requires a mode value."; exit 1; }
         AUTH_MODE="$2"
-        shift 2
-        ;;
-      --network-attachment)
-        [[ -z "${2:-}" ]] && { log_error "--network-attachment requires a resource URI."; exit 1; }
-        NETWORK_ATTACHMENT_ARG="$2"
         shift 2
         ;;
       --skip-tests)
@@ -572,19 +563,14 @@ fi
 gcloud config set project "${PROJECT_ID}" --quiet >/dev/null 2>&1 || true
 log_ok "Selected Target GCP Project: ${PROJECT_ID}"
 
-# 4. Prompt or resolve Region, Apigee URL, and Network Attachment
+# 4. Prompt or resolve Region and Apigee URL
 prompt_runtime_settings
-
-if [[ -n "${NETWORK_ATTACHMENT_ARG}" ]]; then
-  NETWORK_ATTACHMENT="${NETWORK_ATTACHMENT_ARG}"
-fi
 
 # Persist chosen configuration into .env
 upsert_env_var "GOOGLE_CLOUD_PROJECT" "${PROJECT_ID}"
 upsert_env_var "GOOGLE_CLOUD_LOCATION" "${REGION}"
 upsert_env_var "MCP_SERVER_URL" "${MCP_SERVER_URL}"
 upsert_env_var "APIGEE_AUTH_MODE" "${APIGEE_AUTH_MODE}"
-[[ -n "${NETWORK_ATTACHMENT:-}" ]] && upsert_env_var "NETWORK_ATTACHMENT" "${NETWORK_ATTACHMENT}"
 
 LOGS_BUCKET_NAME="${LOGS_BUCKET_NAME:-}"
 if [[ -z "${LOGS_BUCKET_NAME}" || "${LOGS_BUCKET_NAME}" == *"your-gcp-project-id"* ]]; then
@@ -604,7 +590,6 @@ echo "   • Foundation Model        : ${MODEL_NAME:-gemini-2.5-flash}"
 echo "   • Apigee MCP Proxy URL    : ${MCP_SERVER_URL}"
 echo "   • Apigee Auth Mode        : ${APIGEE_AUTH_MODE}"
 echo "   • Verify Apigee SSL       : ${APIGEE_VERIFY_SSL:-true}"
-echo "   • PSC Network Attachment  : ${NETWORK_ATTACHMENT:-<none (public/routable ingress)>}"
 echo "   • Telemetry Logs Bucket   : gs://${LOGS_BUCKET_NAME}"
 echo "--------------------------------------------------------------------------------"
 
@@ -789,14 +774,6 @@ DEPLOY_CMD=(
 
 if [[ "${ENABLE_AGENT_IDENTITY:-true}" == "true" ]]; then
   DEPLOY_CMD+=(--agent-identity)
-fi
-
-if [[ -n "${NETWORK_ATTACHMENT:-}" ]]; then
-  log_info "Attaching PSC Network Attachment for Cloud VPN connectivity: ${NETWORK_ATTACHMENT}"
-  DEPLOY_CMD+=(--network-attachment "${NETWORK_ATTACHMENT}")
-  [[ -n "${DNS_PEERING_DOMAIN:-}" ]] && DEPLOY_CMD+=(--dns-peering-domain "${DNS_PEERING_DOMAIN}")
-  [[ -n "${DNS_PEERING_PROJECT:-}" ]] && DEPLOY_CMD+=(--dns-peering-project "${DNS_PEERING_PROJECT}")
-  [[ -n "${DNS_PEERING_NETWORK:-}" ]] && DEPLOY_CMD+=(--dns-peering-network "${DNS_PEERING_NETWORK}")
 fi
 
 log_info "Deploying Telecom ADK Agent to GCP Agent Runtime (this typically takes 5-8 minutes)..."
