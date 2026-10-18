@@ -1,0 +1,78 @@
+{
+  "eval_cases": [
+    {
+      "eval_case_id": "customer_lookup",
+      "prompt": {
+        "role": "user",
+        "parts": [{"text": "Can you look up customer with phone number +1 (555) 234-5678?"}]
+      },
+      "expected_tools": ["search_customer"]
+    },
+    {
+      "eval_case_id": "service_diagnostics",
+      "prompt": {
+        "role": "user",
+        "parts": [{"text": "Run line diagnostics for subscriber phone number +1 (555) 234-5678"}]
+      },
+      "expected_tools": ["get_service_diagnostics"]
+    },
+    {
+      "eval_case_id": "device_maintenance",
+      "prompt": {
+        "role": "user",
+        "parts": [{"text": "Please run a ping sweep on customer equipment for +1 (555) 234-5678"}]
+      },
+      "expected_tools": ["run_remote_device_action"]
+    },
+    {
+      "eval_case_id": "network_outage_check",
+      "prompt": {
+        "role": "user",
+        "parts": [{"text": "Are there any fiber or network outages in postal code 97477?"}]
+      },
+      "expected_tools": ["check_network_outages"]
+    },
+    {
+      "eval_case_id": "billing_breakdown",
+      "prompt": {
+        "role": "user",
+        "parts": [{"text": "Show me the billing breakdown for subscriber +1 (555) 234-5678"}]
+      },
+      "expected_tools": ["get_billing_breakdown"]
+    },
+    {
+      "eval_case_id": "upsell_recommendations",
+      "prompt": {
+        "role": "user",
+        "parts": [{"text": "What upgrade offers are recommended for subscriber +1 (555) 234-5678?"}]
+      },
+      "expected_tools": ["get_upsell_recommendations"]
+    },
+    {
+      "eval_case_id": "out_of_scope_weather",
+      "prompt": {
+        "role": "user",
+        "parts": [{"text": "What is the weather forecast for Paris tomorrow?"}]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [{"text": "I am dedicated exclusively to telecom customer care, diagnostics, billing, network outages, and subscriber operations. This requested functionality is not available."}]
+        }
+      }
+    },
+    {
+      "eval_case_id": "out_of_scope_coding",
+      "prompt": {
+        "role": "user",
+        "parts": [{"text": "Write a Python script to sort an array using quicksort."}]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [{"text": "I am dedicated exclusively to telecom customer care, diagnostics, billing, network outages, and subscriber operations. This requested functionality is not available."}]
+        }
+      }
+    }
+  ]
+}

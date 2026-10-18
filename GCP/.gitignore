@@ -1,0 +1,60 @@
+# ==============================================================================
+# Purpose: Git exclusion rules for the GCP Telecom ADK Agent (Agent Runtime).
+# Architecture/Context: Prevents committing secrets, virtual environments,
+#                       Terraform state, and build artifacts in TE/GCP/.
+# Dependencies/Side Effects: Enforced by Git across TE/GCP/.
+# ==============================================================================
+
+# Secrets & Environment Configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*credentials*.json
+*service-account*.json
+*.tfvars
+!deployment/terraform/single-project/vars/env.tfvars
+
+# Python & Virtual Environments
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.Python
+build/
+dist/
+wheels/
+
+# ADK, Agents CLI & Test Caches
+.adk/
+.google-agents-cli/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+deployment_metadata.json.lock
+
+# Terraform State & Provider Caches
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# OS & Editor Noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*~
