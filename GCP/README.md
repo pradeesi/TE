@@ -1,6 +1,6 @@
 <!--
-  Purpose: Architecture, configuration, Cloud Shell installation/uninstallation, observability, Agent Registry, and Gemini Enterprise registration guide for the GCP Telecom ADK Agent on Vertex AI Agent Runtime.
-  Architecture/Context: Governs the GCP-resident Google ADK Agent (running exclusively on Vertex AI Agent Runtime) sending traffic over Cloud VPN to the On-Premises Apigee API Proxy and MCP Server (`TE/On-prem`).
+  Purpose: Architecture, PSC pre-deployment setup, Cloud Shell installation/uninstallation, observability, Agent Registry, and Gemini Enterprise registration guide for the GCP Telecom ADK Agent on Vertex AI Agent Runtime.
+  Architecture/Context: Governs the GCP-resident Google ADK Agent (running exclusively on Vertex AI Agent Runtime) sending traffic over an existing Cloud VPN (bridged via PSC Network Attachment) to the On-Premises Apigee API Proxy and MCP Server (`TE/On-prem`).
   Dependencies/Side Effects: Requires Google Cloud Shell (`gcloud`), `uv`, and `google-agents-cli`.
 -->
 
@@ -8,7 +8,7 @@
 
 This directory ([`TE/GCP/`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP)) contains the **Google Agent Development Kit (ADK) Agent** deployed exclusively on **Google Cloud Agent Runtime (Vertex AI Reasoning Engines)**.
 
-The agent sends traffic over the existing **Google Cloud VPN** connection to the **On-Premises Apigee API Proxy** (`MCP_SERVER_URL`), which forwards requests to the **On-Premises Telecom MCP Server** ([`TE/On-prem/`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/On-prem)). Once deployed on GCP Agent Runtime via [`./install.sh`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/install.sh) in **Google Cloud Shell**, the agent is automatically registered in **GCP Agent Registry**, monitored with **GCP Agent Runtime Logging, Cloud Trace, and Cloud Monitoring**, and ready for manual registration into the **Gemini Enterprise App** UI.
+The agent sends traffic over your existing **Google Cloud VPN** connection (bridged into your VPC via a **Private Service Connect (PSC) Network Attachment**) to the **On-Premises Apigee API Proxy** (`MCP_SERVER_URL`), which forwards requests to the **On-Premises Telecom MCP Server** ([`TE/On-prem/`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/On-prem)). Once deployed on GCP Agent Runtime via [`./install.sh`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/install.sh) in **Google Cloud Shell**, the agent is automatically registered in **GCP Agent Registry**, monitored with **GCP Agent Runtime Logging, Cloud Trace, and Cloud Monitoring**, and ready for manual registration into the **Gemini Enterprise App** UI.
 
 ---
 
@@ -19,6 +19,7 @@ flowchart LR
     subgraph GCP["Google Cloud Platform (TE/GCP)"]
         GE["Gemini Enterprise App UI<br/>(Manual ADK Registration)"]
         AR["Vertex AI Agent Runtime<br/>(Reasoning Engine: telecom-agent-hybrid-apigee)"]
+        PSC["PSC Network Attachment<br/>(Bridges Agent Runtime into VPN VPC)"]
         REG["GCP Agent Registry<br/>(Fleet Catalog & Discovery)"]
         OBS["GCP Agent Runtime Observability<br/>Cloud Logging • Cloud Trace • Cloud Monitoring • BigQuery/GCS"]
     end
@@ -33,7 +34,8 @@ flowchart LR
     GE -->|":streamQuery (IAM / OIDC)"| AR
     AR -.->|"Auto-Registered"| REG
     AR -.->|"OTel Spans, Structured JSON Logs & Metrics"| OBS
-    AR ==>|"JSON-RPC 2.0 over Cloud VPN"| APIGEE
+    AR -->|"Attached at Deploy Time"| PSC
+    PSC ==>|"Existing Cloud VPN Tunnel"| APIGEE
     APIGEE -->|"POST /mcp"| MCP
     MCP --> PG
     MCP -.->|"Audit Logs & Metrics"| LOKI
@@ -44,8 +46,8 @@ flowchart LR
 1. **Strict 8-Tool Telecom Domain Scope**:
    - The ADK Agent (`gemini-2.5-flash`) is strictly bounded to the 8 telecom customer-care MCP tools (`search_customer`, `get_customer_360`, `get_service_diagnostics`, `run_remote_device_action`, `check_network_outages`, `get_billing_breakdown`, `get_upsell_recommendations`, `log_agent_interaction`).
    - Any out-of-scope prompt is deterministically refused with a standardized compliance message.
-2. **Traffic to On-Premises Apigee over Cloud VPN**:
-   - The ADK Agent connects directly to the On-Premises Apigee API Proxy (`MCP_SERVER_URL`) over the pre-configured **Cloud VPN** connection, with configurable SSL verification (`APIGEE_VERIFY_SSL`).
+2. **Private Cloud VPN Connectivity via PSC Network Attachment**:
+   - Cloud VPN itself is managed externally in your GCP VPC. To allow the serverless Vertex AI Agent Runtime instance (which runs in a Google-managed tenant project) to send traffic into your VPC and across the existing Cloud VPN to a private on-premises Apigee IP, Agent Runtime attaches to a **Private Service Connect (PSC) Network Attachment** (`NETWORK_ATTACHMENT`) created in your VPN-connected VPC before agent deployment.
 3. **Flexible Apigee Authentication (`APIGEE_AUTH_MODE`)**:
    - Because on-premises Apigee authentication policies can vary across environments, [`app/config.py`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/app/config.py) and [`app/tools.py`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/app/tools.py) support plug-and-play authentication modes via `.env` without code changes:
      - `auto` *(default)*: Automatically attaches credentials based on which environment variables are populated (`APIGEE_API_KEY`, `MCP_AUTH_TOKEN`, `APIGEE_BEARER_TOKEN`, `APIGEE_CUSTOM_HEADER_NAME`, or `APIGEE_BASIC_USER`), or sends unauthenticated requests if none are set.
@@ -69,10 +71,10 @@ flowchart LR
 
 ```text
 TE/GCP/
-├── .env.example                          # Template environment configuration (Apigee URL, Auth, Telemetry)
+├── .env.example                          # Template environment configuration (PSC, Apigee URL/Auth, Telemetry)
 ├── .gitignore                            # Excludes .env, virtualenvs, caches, and deployment_metadata.json
 ├── Dockerfile                            # Container definition required by `agents-cli deploy` for Agent Runtime
-├── README.md                             # Architecture, Cloud Shell installation, and Gemini Enterprise guide
+├── README.md                             # Architecture, PSC setup, Cloud Shell installation, and Gemini Enterprise guide
 ├── agents-cli-manifest.yaml              # Google Agents CLI manifest (deployment_target: agent_runtime)
 ├── install.sh                            # Interactive Cloud Shell installer (numbered GCP project menu)
 ├── uninstall.sh                          # Interactive Cloud Shell uninstaller (numbered GCP project menu)
@@ -121,6 +123,7 @@ All configuration is externalized via environment variables or `.env` (copied fr
 | `GOOGLE_CLOUD_PROJECT` | `string` | `pradeesi-ai-demo` | **Required.** Target Google Cloud Project ID. |
 | `GOOGLE_CLOUD_LOCATION` | `string` | `us-central1` | Target GCP region for Agent Runtime and Agent Registry. |
 | `MODEL_NAME` | `string` | `gemini-2.5-flash` | Gemini model used by the ADK Agent. |
+| `NETWORK_ATTACHMENT` | `string` | `projects/.../networkAttachments/...` | PSC Network Attachment resource URI bridging Agent Runtime into your Cloud VPN VPC. **Must be created before deploying the agent** if Apigee uses a private RFC 1918 IP. |
 | `MCP_SERVER_URL` | `string` | `https://apigee.onprem.internal/telecom-mcp` | **Required.** Base URL of the On-Premises Apigee API Proxy reached over Cloud VPN. |
 | `APIGEE_VERIFY_SSL` | `bool` | `true` | Set to `false` if the on-premises Apigee endpoint uses a self-signed or private CA TLS certificate. |
 | `APIGEE_AUTH_MODE` | `string` | `auto` | Apigee authentication strategy: `auto`, `none`, `api_key`, `bearer`, `google_id_token`, `basic`, or `custom_header`. |
@@ -147,13 +150,56 @@ All configuration is externalized via environment variables or `.env` (copied fr
 
 ---
 
+## Pre-Deployment: Private Service Connect (PSC) Creation & Configuration
+
+> [!IMPORTANT]
+> **Must Be Created Before Agent Deployment (If Using Private IPs over Cloud VPN)**:
+> - Your **Cloud VPN** is assumed to be already configured on your GCP VPC by your network team.
+> - However, creating a Cloud VPN does **not** automatically create a Private Service Connect (PSC) Network Attachment.
+> - Because Vertex AI Agent Runtime runs in a Google-managed tenant project outside your VPC — and its **PSC configuration is immutable once the agent is deployed** — you **must** create the PSC Network Attachment in your VPN-connected VPC **before** running `./install.sh` if your On-Premises Apigee endpoint uses a private RFC 1918 IP address (`10.x.x.x`, `172.16.x.x`, `192.168.x.x`).
+
+### Run in Google Cloud Shell (Before Installing the Agent)
+
+Open [Google Cloud Shell](https://shell.cloud.google.com) and run the following commands to create a dedicated subnet and PSC Network Attachment inside the VPC where your Cloud VPN is already terminated:
+
+```bash
+export PROJECT_ID="your-gcp-project-id"
+export REGION="us-central1"
+export VPN_VPC_NAME="your-existing-vpn-vpc"          # e.g., default or hybrid-vpn-vpc
+export PSC_SUBNET_NAME="telecom-agent-psc-subnet"
+export PSC_SUBNET_CIDR="10.240.0.0/24"               # Non-overlapping /24 CIDR in your VPC
+export ATTACHMENT_NAME="telecom-agent-psc-attachment"
+
+# 1. Create a subnet in your existing VPN-connected VPC for the PSC interface
+gcloud compute networks subnets create "${PSC_SUBNET_NAME}" \
+  --project="${PROJECT_ID}" \
+  --network="${VPN_VPC_NAME}" \
+  --region="${REGION}" \
+  --range="${PSC_SUBNET_CIDR}"
+
+# 2. Create the PSC Network Attachment so Agent Runtime can attach to your VPN VPC
+gcloud compute network-attachments create "${ATTACHMENT_NAME}" \
+  --project="${PROJECT_ID}" \
+  --region="${REGION}" \
+  --subnets="${PSC_SUBNET_NAME}" \
+  --connection-preference=ACCEPT_AUTOMATIC
+
+# 3. Print the full PSC Network Attachment resource URI (used in ./install.sh below)
+export NETWORK_ATTACHMENT="projects/${PROJECT_ID}/regions/${REGION}/networkAttachments/${ATTACHMENT_NAME}"
+echo "PSC Network Attachment URI: ${NETWORK_ATTACHMENT}"
+```
+
+*(Note for your Network/VPN Administrator: Ensure your Cloud Router / Cloud VPN advertises `${PSC_SUBNET_CIDR}` (`10.240.0.0/24`) to the on-premises network so return packets from the on-premises Apigee proxy route back to the Agent Runtime PSC interface).*
+
+---
+
 ## Google Cloud Shell Installation & Uninstallation Guide
 
 All installation, verification, and uninstallation steps are designed to be executed directly from **Google Cloud Shell** (`https://shell.cloud.google.com`). You do not need to manually install Python, `uv`, or `google-agents-cli` beforehand — [`./install.sh`](file:///usr/local/google/home/pradeesi/Documents/jetski/TE/GCP/install.sh) installs all prerequisites and runs pre-flight unit tests automatically inside Cloud Shell.
 
-### Step 1: Open Google Cloud Shell & Clone the Repository
+### Step 1: Clone the Repository in Google Cloud Shell
 
-Open [Google Cloud Shell](https://shell.cloud.google.com) in your browser and run:
+In [Google Cloud Shell](https://shell.cloud.google.com), run:
 
 ```bash
 git clone https://github.com/pradeesi/TE.git
@@ -163,13 +209,57 @@ chmod +x install.sh uninstall.sh
 
 ---
 
-### Step 2: Run the Interactive Installer (`./install.sh`) in Google Cloud Shell
+### Step 2: (Optional) Configure Apigee Authentication & PSC URI in `.env`
 
-Launch the installer directly from Google Cloud Shell:
+If you created a PSC Network Attachment in the pre-deployment section above or want to pre-configure Apigee authentication credentials before running the installer:
+
+```bash
+cp .env.example .env
+nano .env
+```
+
+Choose whichever Apigee authentication mode matches your Apigee proxy configuration:
+
+- **Case 1 — No Authentication (`APIGEE_AUTH_MODE=none` or `auto`)**:
+  ```dotenv
+  NETWORK_ATTACHMENT=projects/your-gcp-project-id/regions/us-central1/networkAttachments/telecom-agent-psc-attachment
+  MCP_SERVER_URL=https://apigee.onprem.internal/telecom-mcp
+  APIGEE_AUTH_MODE=none
+  APIGEE_VERIFY_SSL=false
+  ```
+- **Case 2 — Apigee `VerifyAPIKey` Policy (`APIGEE_AUTH_MODE=api_key`)**:
+  ```dotenv
+  NETWORK_ATTACHMENT=projects/your-gcp-project-id/regions/us-central1/networkAttachments/telecom-agent-psc-attachment
+  MCP_SERVER_URL=https://apigee.onprem.internal/telecom-mcp
+  APIGEE_AUTH_MODE=api_key
+  APIGEE_API_KEY=your-apigee-consumer-key
+  APIGEE_API_KEY_HEADER=x-apikey
+  ```
+- **Case 3 — Static Bearer Token (`APIGEE_AUTH_MODE=bearer`)**:
+  ```dotenv
+  NETWORK_ATTACHMENT=projects/your-gcp-project-id/regions/us-central1/networkAttachments/telecom-agent-psc-attachment
+  MCP_SERVER_URL=https://apigee.onprem.internal/telecom-mcp
+  APIGEE_AUTH_MODE=bearer
+  MCP_AUTH_TOKEN=your-bearer-token
+  ```
+- **Case 4 — Google OIDC ID Token (`APIGEE_AUTH_MODE=google_id_token`)**:
+  ```dotenv
+  NETWORK_ATTACHMENT=projects/your-gcp-project-id/regions/us-central1/networkAttachments/telecom-agent-psc-attachment
+  MCP_SERVER_URL=https://apigee.onprem.internal/telecom-mcp
+  APIGEE_AUTH_MODE=google_id_token
+  ```
+
+---
+
+### Step 3: Run the Interactive Installer (`./install.sh`) in Google Cloud Shell
+
+Launch the installer from Google Cloud Shell:
 
 ```bash
 ./install.sh
 ```
+
+*(Or pass the PSC Network Attachment directly via CLI flag: `./install.sh --network-attachment "${NETWORK_ATTACHMENT}"`)*
 
 #### Interactive Prompts in Google Cloud Shell
 
@@ -198,38 +288,7 @@ Launch the installer directly from Google Cloud Shell:
 - Enables required GCP APIs (`aiplatform.googleapis.com`, `agentregistry.googleapis.com`, `logging.googleapis.com`, `monitoring.googleapis.com`, `cloudtrace.googleapis.com`, `telemetry.googleapis.com`, `storage.googleapis.com`, `bigquery.googleapis.com`, `secretmanager.googleapis.com`) with automatic retry backoff.
 - Creates the GCS prompt/response completion bucket (`gs://<PROJECT_ID>-telecom-agent-logs`), BigQuery dataset (`telecom_agent_hybrid_apigee_telemetry`), Cloud Logging BigQuery sink (`telecom-agent-hybrid-apigee-reasoning-engine-logs`), and IAM bindings.
 - Creates the 3 Cloud Logging log-based metrics (`telecom_agent_mcp_tool_calls_total`, `telecom_agent_mcp_tool_errors_total`, `telecom_agent_model_armor_blocks_total`) and the **Cloud Monitoring Dashboard** (`Telecom ADK Agent Runtime & Apigee VPN Observability`).
-- Deploys the ADK Agent to **Vertex AI Agent Runtime** (`agents-cli deploy`) with automatic polling recovery if the CLI hits a client wait timeout, verifies registration in **GCP Agent Registry**, and writes `deployment_metadata.json`.
-
----
-
-### Step 3: (Optional) Configuring Flexible Apigee Authentication in Cloud Shell
-
-If your Apigee engineer enables authentication on the Apigee API Proxy, edit `.env` in Cloud Shell (`nano .env`) and re-run `./install.sh`:
-
-- **Case 1 — No Authentication (`APIGEE_AUTH_MODE=none` or `auto`)**:
-  ```dotenv
-  MCP_SERVER_URL=https://apigee.onprem.internal/telecom-mcp
-  APIGEE_AUTH_MODE=none
-  APIGEE_VERIFY_SSL=false
-  ```
-- **Case 2 — Apigee `VerifyAPIKey` Policy (`APIGEE_AUTH_MODE=api_key`)**:
-  ```dotenv
-  MCP_SERVER_URL=https://apigee.onprem.internal/telecom-mcp
-  APIGEE_AUTH_MODE=api_key
-  APIGEE_API_KEY=your-apigee-consumer-key
-  APIGEE_API_KEY_HEADER=x-apikey
-  ```
-- **Case 3 — Static Bearer Token (`APIGEE_AUTH_MODE=bearer`)**:
-  ```dotenv
-  MCP_SERVER_URL=https://apigee.onprem.internal/telecom-mcp
-  APIGEE_AUTH_MODE=bearer
-  MCP_AUTH_TOKEN=your-bearer-token
-  ```
-- **Case 4 — Google OIDC ID Token (`APIGEE_AUTH_MODE=google_id_token`)**:
-  ```dotenv
-  MCP_SERVER_URL=https://apigee.onprem.internal/telecom-mcp
-  APIGEE_AUTH_MODE=google_id_token
-  ```
+- Deploys the ADK Agent to **Vertex AI Agent Runtime** (`agents-cli deploy`) with `--network-attachment` (when configured) and automatic polling recovery if the CLI hits a client wait timeout, verifies registration in **GCP Agent Registry**, and writes `deployment_metadata.json`.
 
 ---
 

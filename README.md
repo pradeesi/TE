@@ -11,7 +11,7 @@ End-to-end **Hybrid Cloud + On-Premises AI Reference Architecture** for an enter
 1. **[`GCP/`](./GCP/) — Google Cloud Platform Plane (ADK Agent on Agent Runtime)**:
    - Hosts the **Google Agent Development Kit (ADK) Agent** (`telecom-agent-hybrid-apigee`, powered by `gemini-2.5-flash`) on **Vertex AI Agent Runtime (Reasoning Engines)**.
    - Registers the agent in **GCP Agent Registry** (`agentregistry.googleapis.com`) and enables full **GCP Agent Runtime Observability** (Cloud Logging, Cloud Trace, Cloud Monitoring log-based metrics & dashboards, and GCS/BigQuery prompt-response telemetry).
-   - Sends traffic over **Cloud VPN** to the On-Premises Apigee API Proxy (`MCP_SERVER_URL`) with plug-and-play authentication (`APIGEE_AUTH_MODE`: `auto`, `none`, `api_key`, `bearer`, `google_id_token`, `basic`, `custom_header`).
+   - Sends traffic over your existing **Cloud VPN** (bridged into your VPN VPC via a pre-deployment **Private Service Connect (PSC) Network Attachment**) to the On-Premises Apigee API Proxy (`MCP_SERVER_URL`) with plug-and-play authentication (`APIGEE_AUTH_MODE`: `auto`, `none`, `api_key`, `bearer`, `google_id_token`, `basic`, `custom_header`).
    - Includes interactive **Google Cloud Shell** [`GCP/install.sh`](./GCP/install.sh) and [`GCP/uninstall.sh`](./GCP/uninstall.sh) scripts featuring a **numbered GCP project selector**.
 
 2. **[`On-prem/`](./On-prem/) — Customer On-Premises Data Center Plane (MCP Server, CRM & Observability)**:
@@ -31,6 +31,7 @@ flowchart LR
     subgraph GCP["1. Google Cloud Platform (GCP/)"]
         GE["Gemini Enterprise App UI<br/>(Manual ADK Registration)"]
         AR["Vertex AI Agent Runtime<br/>(ADK Agent: telecom_agent_hybrid_apigee)"]
+        PSC["PSC Network Attachment<br/>(Bridges Agent Runtime into VPN VPC)"]
         REG["GCP Agent Registry<br/>(Fleet Catalog)"]
         OBS["GCP Observability<br/>Cloud Logging • Cloud Trace • Cloud Monitoring"]
     end
@@ -46,7 +47,8 @@ flowchart LR
     GE -->|":streamQuery"| AR
     AR -.->|"Registered"| REG
     AR -.->|"Traces, Logs & Metrics"| OBS
-    AR ==>|"JSON-RPC 2.0 over Cloud VPN"| APIGEE
+    AR -->|"Attached at Deploy Time"| PSC
+    PSC ==>|"Existing Cloud VPN"| APIGEE
     APIGEE -->|"Southbound POST /mcp"| MCP
     MCP --> PG
     CRM --> PG
