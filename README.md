@@ -143,6 +143,8 @@ All runtime settings are loaded from `.env` (created from `.env.example`). No se
 | `GRAFANA_ADMIN_PASSWORD` | `string` | `telecom_admin` | **Required.** Grafana administrator password. |
 | `PORTAINER_HTTPS_PORT` | `int` | `9443` | Host port exposed for the Portainer HTTPS UI. |
 | `PORTAINER_HTTP_PORT` | `int` | `9000` | Host port exposed for the Portainer HTTP UI. |
+| `PORTAINER_ADMIN_USER` | `string` | `admin` | Portainer administrator username (auto-initialized during `install.sh`). |
+| `PORTAINER_ADMIN_PASSWORD` | `string` | `telecom_admin` | **Required (min 12 chars).** Portainer administrator password (auto-initialized during `install.sh` so Portainer never times out). |
 
 ---
 
@@ -152,7 +154,7 @@ Run the following commands on an **Ubuntu 22.04 LTS or 24.04 LTS VM** in the cus
 
 ### Step 1: Clone the Repository and (Optionally) Customize `.env`
 
-If `.env` does not exist, `./install.sh` automatically creates it from `.env.example`. To clone the repository and optionally customize `POSTGRES_PASSWORD` or `GRAFANA_ADMIN_PASSWORD` prior to installation:
+If `.env` does not exist, `./install.sh` automatically creates it from `.env.example`. To clone the repository and optionally customize `POSTGRES_PASSWORD`, `GRAFANA_ADMIN_PASSWORD`, or `PORTAINER_ADMIN_PASSWORD` prior to installation:
 
 ```bash
 git clone https://github.com/pradeesi/TE.git
@@ -174,7 +176,7 @@ What `./install.sh` performs automatically:
 3. **Installs Docker Engine & Docker Compose v2**: Configures the official Ubuntu Docker APT repository and installs `docker-ce`, `docker-ce-cli`, `containerd.io`, `docker-buildx-plugin`, and `docker-compose-plugin` if not already installed.
 4. **Enables Boot Persistence (`VM Restart Events`)**: Enables `containerd.service` and `docker.service` via `systemd` so that all 7 containers (configured with `restart: always` in `docker-compose.yml`) automatically start whenever the Ubuntu VM restarts.
 5. **Initializes `.env` & Configures Firewall (`ufw`)**: Creates `.env` from `.env.example` (if not already present), checks for host port conflicts, and opens TCP ports `8000`, `8001`, `3000`, `9090`, `3100`, `5432`, `9443`, and `9000` if `ufw` is active.
-6. **Builds & Starts All 7 Containers**: Runs `docker compose up -d --build --remove-orphans`, verifies HTTP health checks across all services, and prints all Customer Network URLs.
+6. **Builds, Starts & Auto-Initializes All 7 Containers (Including Portainer Admin)**: Runs `docker compose up -d --build --remove-orphans`, verifies HTTP health checks across all services, and automatically initializes the Portainer CE administrator account via API (`PORTAINER_ADMIN_USER` / `PORTAINER_ADMIN_PASSWORD`) so Portainer **never** triggers the 5-minute uninitialized security timeout.
 
 ### Step 3: Verify Running Containers
 
@@ -210,11 +212,10 @@ Replace `<UBUNTU_VM_IP>` below with the Ubuntu VM's IP address (for example, `10
 ### 1. Portainer CE (Container Status & Administration)
 - **HTTPS URL**: `https://<UBUNTU_VM_IP>:9443`
 - **HTTP URL**: `http://<UBUNTU_VM_IP>:9000`
-- **Initial Setup**:
-  1. Open `https://<UBUNTU_VM_IP>:9443` (or `http://<UBUNTU_VM_IP>:9000`) in your browser within 5 minutes of first launch.
-  2. Create your administrator username and password on the Portainer setup screen.
-  3. Click **Get Started** -> select the **local** Docker environment -> click **Containers** to inspect live health status (`healthy` / `running`), container logs, CPU/RAM metrics, and restart controls for all 7 containers.
-  > **Note**: If the 5-minute initial setup window expires before you open Portainer, run `docker restart telecom-portainer` on the Ubuntu VM to reopen the setup screen.
+- **Credentials**: Username from `PORTAINER_ADMIN_USER` (default `admin`) and password from `PORTAINER_ADMIN_PASSWORD` (default `telecom_admin`) in `.env`.
+- **Usage**:
+  1. Open `https://<UBUNTU_VM_IP>:9443` (or `http://<UBUNTU_VM_IP>:9000`) in your browser and sign in with `admin` / `telecom_admin` (pre-initialized automatically by `./install.sh` so the 5-minute setup timeout never occurs).
+  2. Click **Get Started** -> select the **local** Docker environment -> click **Containers** to inspect live health status (`healthy` / `running`), container logs, CPU/RAM metrics, and restart controls for all 7 containers.
 
 ### 2. CRM Application (Customer Care Agent Console)
 - **Web URL**: `http://<UBUNTU_VM_IP>:8000`

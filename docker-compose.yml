@@ -168,6 +168,10 @@ services:
     image: portainer/portainer-ce:lts
     container_name: telecom-portainer
     restart: always
+    command:
+      - "--no-setup-token"
+    environment:
+      PORTAINER_NO_SETUP_TOKEN: "true"
     ports:
       - "${BIND_ADDRESS:-0.0.0.0}:${PORTAINER_HTTPS_PORT:-9443}:9443"
       - "${BIND_ADDRESS:-0.0.0.0}:${PORTAINER_HTTP_PORT:-9000}:9000"

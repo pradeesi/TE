@@ -372,6 +372,13 @@ initialize_env_file() {
     exit 1
   fi
 
+  export PORTAINER_ADMIN_USER="${PORTAINER_ADMIN_USER:-admin}"
+  export PORTAINER_ADMIN_PASSWORD="${PORTAINER_ADMIN_PASSWORD:-telecom_admin}"
+  if (( ${#PORTAINER_ADMIN_PASSWORD} < 12 )); then
+    log_error "PORTAINER_ADMIN_PASSWORD in .env must be at least 12 characters long (current length: ${#PORTAINER_ADMIN_PASSWORD})."
+    exit 1
+  fi
+
   local port_var
   for port_var in POSTGRES_PORT CRM_PORT MCP_PORT PROMETHEUS_PORT LOKI_PORT GRAFANA_PORT PORTAINER_HTTPS_PORT PORTAINER_HTTP_PORT; do
     local port_val="${!port_var:-}"
@@ -480,6 +487,60 @@ wait_for_http() {
 }
 
 #######################################
+# Summary: Automatically initializes the Portainer CE administrator account via
+#          `POST /api/users/admin/init` during installation so Portainer NEVER
+#          triggers its 5-minute uninitialized security timeout lockout.
+# Parameters: None.
+# Return Value: 0 on success.
+# Exceptions/Errors: Exits with status 1 if admin initialization fails.
+#######################################
+initialize_portainer_admin() {
+  local base_url="http://127.0.0.1:${PORTAINER_HTTP_PORT:-9000}"
+  local check_code
+  check_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "${base_url}/api/users/admin/check" || echo "000")"
+
+  if [[ "${check_code}" == "204" ]]; then
+    log_info "Portainer administrator account is already initialized."
+    return 0
+  fi
+
+  log_info "Auto-initializing Portainer administrator account ('${PORTAINER_ADMIN_USER}') to prevent 5-minute security timeout..."
+  local payload
+  payload="$(jq -cn \
+    --arg u "${PORTAINER_ADMIN_USER}" \
+    --arg p "${PORTAINER_ADMIN_PASSWORD}" \
+    '{Username: $u, Password: $p}')"
+
+  local init_code
+  init_code="$(curl -s -o /tmp/portainer_init.$$.json -w '%{http_code}' --max-time 10 \
+    -X POST "${base_url}/api/users/admin/init" \
+    -H "Content-Type: application/json" \
+    --data "${payload}" || echo "000")"
+
+  if [[ "${init_code}" != "200" ]]; then
+    # If Portainer was already locked by the 5-minute timeout from a prior uninitialized run,
+    # restart telecom-portainer to clear the lockout and immediately initialize the admin user.
+    log_warn "Portainer returned HTTP ${init_code} on initial admin setup; restarting telecom-portainer and retrying..."
+    ${DOCKER_CMD} restart telecom-portainer >/dev/null
+    wait_for_http "Portainer CE" "portainer" "${base_url}/api/system/status" 60
+    init_code="$(curl -s -o /tmp/portainer_init.$$.json -w '%{http_code}' --max-time 10 \
+      -X POST "${base_url}/api/users/admin/init" \
+      -H "Content-Type: application/json" \
+      --data "${payload}" || echo "000")"
+  fi
+
+  rm -f "/tmp/portainer_init.$$.json"
+
+  if [[ "${init_code}" == "200" || "${init_code}" == "409" ]]; then
+    log_info "Portainer administrator account ('${PORTAINER_ADMIN_USER}') initialized; 5-minute timeout disabled."
+    return 0
+  fi
+
+  log_error "Failed to initialize Portainer administrator account (HTTP ${init_code})."
+  return 1
+}
+
+#######################################
 # Summary: Main installation workflow.
 # Parameters: "$@" - CLI arguments.
 # Return Value: 0 on success.
@@ -534,6 +595,7 @@ main() {
   wait_for_http "Prometheus" "prometheus" "http://127.0.0.1:${PROMETHEUS_PORT:-9090}/-/healthy" 60
   wait_for_http "Grafana" "grafana" "http://127.0.0.1:${GRAFANA_PORT:-3000}/api/health" 90
   wait_for_http "Portainer CE" "portainer" "http://127.0.0.1:${PORTAINER_HTTP_PORT:-9000}/api/system/status" 60
+  initialize_portainer_admin
 
   local vm_ip
   vm_ip="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
@@ -548,8 +610,8 @@ main() {
   ${DOCKER_CMD} compose ps
   echo "--------------------------------------------------------------------------------"
   echo "  Customer Network Access URLs (Ubuntu VM IP: ${vm_ip}):"
-  echo "  - Portainer CE (HTTPS) : https://${vm_ip}:${PORTAINER_HTTPS_PORT:-9443}"
-  echo "  - Portainer CE (HTTP)  : http://${vm_ip}:${PORTAINER_HTTP_PORT:-9000}"
+  echo "  - Portainer CE (HTTPS) : https://${vm_ip}:${PORTAINER_HTTPS_PORT:-9443} (user: ${PORTAINER_ADMIN_USER})"
+  echo "  - Portainer CE (HTTP)  : http://${vm_ip}:${PORTAINER_HTTP_PORT:-9000} (user: ${PORTAINER_ADMIN_USER})"
   echo "  - CRM Application      : http://${vm_ip}:${CRM_PORT:-8000}"
   echo "  - MCP Server (JSONRPC) : http://${vm_ip}:${MCP_PORT:-8001}/mcp"
   echo "  - MCP Server (SSE)     : http://${vm_ip}:${MCP_PORT:-8001}/sse"
